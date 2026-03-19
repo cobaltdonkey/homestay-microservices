@@ -8,9 +8,9 @@ const Footer = () => (
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
             <Home className="h-3 w-3 text-primary-foreground" />
           </div>
-          <span className="font-heading text-sm font-semibold text-foreground">StayVista</span>
+          <span className="font-heading text-sm font-semibold text-foreground">Home Haven</span>
         </div>
-        <p className="text-xs text-muted-foreground">© 2026 StayVista. Enterprise homestay platform. All rights reserved.</p>
+        <p className="text-xs text-muted-foreground">© 2026 Home Haven. Search, availability, and reservations powered by the homestay microservices backend.</p>
       </div>
     </div>
   </footer>
