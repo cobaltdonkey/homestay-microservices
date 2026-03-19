@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homestay — Host Portal</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .page-wrapper {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 16px 40px;
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #1a1a1a;
+    }
+
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .section h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #222;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #555;
+    }
+
+    .field input[type="text"],
+    .field select,
+    .field textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    .field input[type="text"]:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: #4a90e2;
+    }
+
+    .field textarea {
+      resize: vertical;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .btn-success {
+      background: #198754;
+      color: #fff;
+    }
+
+    .btn-danger {
+      background: #dc3545;
+      color: #fff;
+    }
+
+    .result {
+      margin-top: 16px;
+      font-size: 15px;
+    }
+
+    .result-text-success {
+      color: #1a7f37;
+      font-weight: 500;
+    }
+
+    .result-text-error {
+      color: #c0392b;
+      font-weight: 500;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .badge-confirmed {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .badge-pending_host {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .badge-failed {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .badge-default {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 12px;
+      border: 1px solid #e0e0e0;
+    }
+
+    th {
+      background: #f7f7f7;
+      font-weight: 600;
+      color: #444;
+      width: 40%;
+    }
+
+    td {
+      color: #333;
+    }
+
+    #actionButtons {
+      margin-top: 16px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="page-wrapper">
+    <h1>🏠 Host Portal</h1>
+
+    <!-- SECTION 1: Manage Booking Request -->
+    <div class="section">
+      <h2>Manage Booking Request</h2>
+
+      <div class="field">
+        <label for="bookingId">Booking ID</label>
+        <input id="bookingId" type="text" placeholder="Paste booking ID here">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="loadBooking()">Load</button>
+      </div>
+
+      <div id="bookingResult" class="result"></div>
+      <div id="actionButtons"></div>
+      <div id="actionResult" class="result"></div>
+    </div>
+
+    <!-- SECTION 2: Submit Post-Stay Inspection -->
+    <div class="section">
+      <h2>Submit Post-Stay Inspection</h2>
+
+      <div class="field">
+        <label for="stayId">Stay ID</label>
+        <input id="stayId" type="text" placeholder="Paste stay ID here">
+      </div>
+
+      <div class="field">
+        <label for="condition">Condition</label>
+        <select id="condition">
+          <option value="GOOD">GOOD — Release Deposit</option>
+          <option value="BAD">BAD — Charge Deposit</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" rows="3" placeholder="Describe the property condition..."></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" onclick="submitInspection()">Submit Inspection</button>
+      </div>
+
+      <div id="inspectionResult" class="result"></div>
+    </div>
+
+    <!-- SECTION 3: View Stay Details -->
+    <div class="section">
+      <h2>View Stay Details</h2>
+
+      <div class="field">
+        <label for="viewStayId">Stay ID</label>
+        <input id="viewStayId" type="text" placeholder="Paste stay ID here">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="loadStay()">Load Stay</button>
+      </div>
+
+      <div id="stayResult" class="result"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8000";
+    const DEMO_HOST_ID = "8173a9ff-2a22-4dd3-b714-ab9db0bd8524";
+
+    // ── helpers ──────────────────────────────────────────────
+
+    function badgeClass(status) {
+      if (!status) return "badge-default";
+      const s = status.toUpperCase();
+      if (s === "CONFIRMED") return "badge-confirmed";
+      if (s === "PENDING_HOST") return "badge-pending_host";
+      if (s === "FAILED_PAYMENT" || s === "REJECTED" || s === "EXPIRED") return "badge-failed";
+      return "badge-default";
+    }
+
+    function buildTable(fields) {
+      const rows = fields
+        .map(([k, v]) => `<tr><th>${k}</th><td>${v != null && v !== "" ? v : "—"}</td></tr>`)
+        .join("");
+      return `<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    // ── Section 1 ────────────────────────────────────────────
+
+    async function loadBooking() {
+      const bookingId = document.getElementById("bookingId").value.trim();
+      const resultEl = document.getElementById("bookingResult");
+      const actionEl = document.getElementById("actionButtons");
+      const actionRes = document.getElementById("actionResult");
+
+      resultEl.innerHTML = "<span style='color:#888'>Loading...</span>";
+      actionEl.innerHTML = "";
+      actionRes.innerHTML = "";
+
+      try {
+        const res = await fetch(`${API_BASE}/bookings/${encodeURIComponent(bookingId)}`);
+        const json = await res.json();
+
+        if (!res.ok || !json.data) {
+          resultEl.innerHTML = `<span class="result-text-error">${json.message || "Booking not found"}</span>`;
+          return;
+        }
+
+        const d = json.data;
+        const fields = [
+          ["bookingId", d.bookingId],
+          ["guestId", d.guestId],
+          ["hostId", d.hostId],
+          ["listingId", d.listingId],
+          ["checkInDate", d.checkInDate],
+          ["checkOutDate", d.checkOutDate],
+          ["bookingMode", d.bookingMode],
+          ["status", d.status],
+          ["paymentDueAt", d.paymentDueAt || "—"],
+        ];
+        resultEl.innerHTML = buildTable(fields);
+
+        // Conditional action buttons
+        if ((d.status || "").toUpperCase() === "PENDING_HOST") {
+          actionEl.innerHTML = `
+          <div class="btn-row">
+            <button class="btn-success" onclick="approveBooking()">✓ Approve</button>
+            <button class="btn-danger"  onclick="rejectBooking()">✗ Reject</button>
+          </div>`;
+        } else {
+          const bc = badgeClass(d.status);
+          actionEl.innerHTML = `
+          <div style="margin-top:12px;">
+            <span class="status-badge ${bc}">${d.status || "UNKNOWN"}</span>
+          </div>`;
+        }
+      } catch (err) {
+        resultEl.innerHTML = `<span class="result-text-error">Error loading booking: ${err.message}</span>`;
+      }
+    }
+
+    async function approveBooking() {
+      const bookingId = document.getElementById("bookingId").value.trim();
+      const el = document.getElementById("actionResult");
+      el.innerHTML = "<span style='color:#888'>Approving...</span>";
+
+      try {
+        const res = await fetch(`${API_BASE}/bookings/${encodeURIComponent(bookingId)}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+          el.innerHTML = `<span class="result-text-success">✓ Booking approved — Status: ${json.data?.status || "CONFIRMED"}</span>`;
+        } else {
+          el.innerHTML = `<span class="result-text-error">✗ ${json.message || "Approval failed"}</span>`;
+        }
+        setTimeout(loadBooking, 1000);
+      } catch (err) {
+        el.innerHTML = `<span class="result-text-error">Error: ${err.message}</span>`;
+      }
+    }
+
+    async function rejectBooking() {
+      if (!window.confirm("Reject this booking?")) return;
+
+      const bookingId = document.getElementById("bookingId").value.trim();
+      const el = document.getElementById("actionResult");
+      el.innerHTML = "<span style='color:#888'>Rejecting...</span>";
+
+      try {
+        const res = await fetch(`${API_BASE}/bookings/${encodeURIComponent(bookingId)}/reject`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+          el.innerHTML = `<span class="result-text-error">Booking rejected — Status: ${json.data?.status || "REJECTED"}</span>`;
+        } else {
+          el.innerHTML = `<span class="result-text-error">✗ ${json.message || "Rejection failed"}</span>`;
+        }
+        setTimeout(loadBooking, 1000);
+      } catch (err) {
+        el.innerHTML = `<span class="result-text-error">Error: ${err.message}</span>`;
+      }
+    }
+
+    // ── Section 2 ────────────────────────────────────────────
+
+    async function submitInspection() {
+      const stayId = document.getElementById("stayId").value.trim();
+      const condition = document.getElementById("condition").value;
+      const notes = document.getElementById("notes").value.trim();
+      const el = document.getElementById("inspectionResult");
+
+      el.innerHTML = "<span style='color:#888'>Submitting...</span>";
+
+      try {
+        const res = await fetch(`${API_BASE}/deposit-resolutions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stayId,
+            conditionResult: condition,
+            photos: [],
+            notes,
+            hostId: DEMO_HOST_ID
+          })
+        });
+        const json = await res.json();
+
+        if (res.ok && json.data) {
+          const action = json.data.action || "";
+          const depositStatus = json.data.depositStatus || "";
+          const isRelease = action === "RELEASE" || action === "AUTO_RELEASE";
+          const colour = isRelease ? "result-text-success" : "result-text-error";
+          el.innerHTML = `<span class="${colour}">Action: ${action} | Deposit Status: ${depositStatus}</span>`;
+        } else {
+          el.innerHTML = `<span class="result-text-error">✗ ${json.message || "Submission failed"}</span>`;
+        }
+      } catch (err) {
+        el.innerHTML = `<span class="result-text-error">Error: ${err.message}</span>`;
+      }
+    }
+
+    // ── Section 3 ────────────────────────────────────────────
+
+    async function loadStay() {
+      const stayId = document.getElementById("viewStayId").value.trim();
+      const el = document.getElementById("stayResult");
+
+      el.innerHTML = "<span style='color:#888'>Loading...</span>";
+
+      try {
+        const res = await fetch(`${API_BASE}/stays/${encodeURIComponent(stayId)}`);
+        const json = await res.json();
+
+        if (!res.ok || !json.data) {
+          el.innerHTML = `<span class="result-text-error">${json.message || "Stay not found"}</span>`;
+          return;
+        }
+
+        const d = json.data;
+        const fields = [
+          ["stayId", d.stayId],
+          ["bookingId", d.bookingId],
+          ["guestId", d.guestId],
+          ["hostId", d.hostId],
+          ["listingId", d.listingId],
+          ["checkInDate", d.checkInDate],
+          ["checkOutDate", d.checkOutDate],
+          ["depositAmount", d.depositAmount != null ? `$${d.depositAmount}` : "—"],
+          ["depositStatus", d.depositStatus],
+        ];
+        el.innerHTML = buildTable(fields);
+      } catch (err) {
+        el.innerHTML = `<span class="result-text-error">Error loading stay: ${err.message}</span>`;
+      }
+    }
+  </script>
+
+</body>
+
+</html>

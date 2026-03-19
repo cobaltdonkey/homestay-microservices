@@ -1,0 +1,351 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infra/init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "3307:3306"
+    networks:
+      - airbnb-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - airbnb-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq-setup:
+    build:
+      context: ./infra
+      dockerfile: ./rabbitmq-setup/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - airbnb-net
+    restart: on-failure
+
+  kong:
+    image: kong:3.4
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    volumes:
+      - ./infra/kong.yml:/kong/kong.yml
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    depends_on:
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    networks:
+      - airbnb-net
+
+  # -------------------------------------
+  # APPLICATION SERVICES
+  # -------------------------------------
+
+  booking-service:
+    build:
+      context: ./services/booking-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/booking_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: booking-service
+      PORT: 5001
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5001"
+
+  deposit-resolution:
+    build:
+      context: ./services/deposit-resolution
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/deposit_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: deposit-resolution
+      PORT: 5002
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5002"
+
+  users-service:
+    build:
+      context: ./services/users-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/user_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: users-service
+      PORT: 5003
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5003"
+
+  listings-service:
+    build:
+      context: ./services/listings-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/listings_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: listings-service
+      PORT: 5004
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5004"
+
+  availability-service:
+    build:
+      context: ./services/availability-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/availability_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: availability-service
+      PORT: 5005
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5005"
+
+  stay-service:
+    build:
+      context: ./services/stay-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/stay_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: stay-service
+      PORT: 5006
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5006"
+
+  inspection-service:
+    build:
+      context: ./services/inspection-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/inspection_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: inspection-service
+      PORT: 5007
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5007"
+
+  payment-logs-service:
+    build:
+      context: ./services/payment-logs-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/payment_logs_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: payment-logs-service
+      PORT: 5008
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5008"
+
+  listings-search-service:
+    build:
+      context: ./services/listings-search-service
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/search_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: listings-search-service
+      PORT: 5009
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5009"
+
+  payment-gateway-wrapper:
+    build:
+      context: ./services/payment-gateway-wrapper
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/payment_logs_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: payment-gateway-wrapper
+      PORT: 5010
+      STRIPE_SECRET_KEY: sk_test_placeholder
+      STRIPE_DEMO_MODE: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5010"
+
+  notification-gateway:
+    build:
+      context: ./services/notification-gateway
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/notification_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVICE_NAME: notification-gateway
+      PORT: 5011
+      TWILIO_ACCOUNT_SID: placeholder
+      TWILIO_AUTH_TOKEN: placeholder
+      TWILIO_FROM_NUMBER: +15005550006
+      TWILIO_DEMO_MODE: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/shared:/app/shared
+    networks:
+      - airbnb-net
+    expose:
+      - "5011"
+
+  # -------------------------------------
+  # WORKERS
+  # -------------------------------------
+
+  booking-expirer:
+    build:
+      context: ./workers/booking-expirer
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/booking_db
+      BOOKING_SERVICE_URL: http://booking-service:5001
+    depends_on:
+      - booking-service
+    networks:
+      - airbnb-net
+    restart: unless-stopped
+
+  deposit-expirer:
+    build:
+      context: ./workers/deposit-expirer
+    environment:
+      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/stay_db
+      DEPOSIT_RESOLUTION_URL: http://deposit-resolution:5002
+      INSPECTION_SERVICE_URL: http://inspection-service:5007
+    depends_on:
+      - deposit-resolution
+    networks:
+      - airbnb-net
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  airbnb-net:
+    driver: bridge

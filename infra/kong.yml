@@ -1,0 +1,144 @@
+_format_version: "3.0"
+
+services:
+  - name: booking-service
+    url: http://booking-service:5001
+    routes:
+      - name: booking-route
+        paths:
+          - /bookings
+        methods: ["GET", "POST", "PATCH", "OPTIONS"]
+        strip_path: true
+
+  - name: deposit-resolution-service
+    url: http://deposit-resolution:5002
+    routes:
+      - name: deposit-resolution-route
+        paths:
+          - /deposit-resolutions
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: users-service
+    url: http://users-service:5003
+    routes:
+      - name: users-route
+        paths:
+          - /users
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: listings-service
+    url: http://listings-service:5004
+    routes:
+      - name: listings-route
+        paths:
+          - /listings
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: availability-service
+    url: http://availability-service:5005
+    routes:
+      - name: availability-route
+        paths:
+          - /availability
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        strip_path: true
+
+  - name: stay-service
+    url: http://stay-service:5006
+    routes:
+      - name: stay-route
+        paths:
+          - /stays
+        methods: ["GET", "POST", "PATCH", "OPTIONS"]
+        strip_path: true
+
+  - name: inspection-service
+    url: http://inspection-service:5007
+    routes:
+      - name: inspection-route
+        paths:
+          - /inspections
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: payment-logs-service
+    url: http://payment-logs-service:5008
+    routes:
+      - name: payment-logs-route
+        paths:
+          - /payment-logs
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: listings-search-service
+    url: http://listings-search-service:5009
+    routes:
+      - name: listings-search-route
+        paths:
+          - /search
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+
+  - name: payment-gateway-wrapper
+    url: http://payment-gateway-wrapper:5010
+    routes:
+      - name: payment-gateway-route
+        paths:
+          - /gateway
+        methods: ["GET", "POST", "OPTIONS"]
+        strip_path: true
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 100
+              policy: local
+
+  - name: notification-gateway-service
+    url: http://notification-gateway:5011
+    routes:
+      - name: notification-gateway-route
+        paths:
+          - /notification-gateway
+        methods: ["GET", "OPTIONS"]
+        strip_path: true
+
+  # Handling /health-all differently as requested
+  # Pointing to a dummy/placeholder upstream for now
+  - name: custom-health-aggregator
+    url: http://health-aggregator-service:9000
+    routes:
+      - name: health-all-route
+        paths:
+          - /health-all
+        methods: ["GET"]
+        strip_path: true
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: "X-Request-ID"
+      generator: "uuid"
+      echo_downstream: true
+
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - "GET"
+        - "POST"
+        - "PUT"
+        - "PATCH"
+        - "DELETE"
+        - "OPTIONS"
+      headers:
+        - "Content-Type"
+        - "Authorization"
+        - "X-Request-ID"
+      exposed_headers:
+        - "X-Request-ID"
+      max_age: 3600
+      preflight_continue: false
