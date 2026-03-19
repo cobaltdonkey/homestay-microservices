@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Star, MapPin, Users, BedDouble, Bath, Wifi, ChevronLeft, Zap, Shield, Award } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { Award, Bath, BedDouble, ChevronLeft, MapPin, Shield, Star, Users, Wifi, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -9,20 +9,31 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ImageGallery from "@/components/ImageGallery";
 import BookingPanel from "@/components/BookingPanel";
-import { api, type Listing } from "@/data/mockData";
+import { api, type Listing } from "@/lib/api";
 
 const ListingDetailPage = () => {
   const { id } = useParams();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (id) {
-      api.getListingDetails(id).then((data) => {
+    if (!id) return;
+
+    const loadListing = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api.getListingDetails(id);
         setListing(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Listing not found.");
+      } finally {
         setLoading(false);
-      });
-    }
+      }
+    };
+
+    loadListing();
   }, [id]);
 
   if (loading) {
@@ -30,10 +41,10 @@ const ListingDetailPage = () => {
       <div className="flex min-h-screen flex-col">
         <Navbar />
         <div className="container py-8">
-          <Skeleton className="h-8 w-64 mb-4" />
+          <Skeleton className="mb-4 h-8 w-64" />
           <Skeleton className="h-[420px] w-full rounded-2xl" />
           <div className="mt-8 grid gap-8 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4">
+            <div className="space-y-4 lg:col-span-2">
               <Skeleton className="h-6 w-48" />
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4" />
@@ -45,14 +56,14 @@ const ListingDetailPage = () => {
     );
   }
 
-  if (!listing) {
+  if (!listing || error) {
     return (
       <div className="flex min-h-screen flex-col">
         <Navbar />
         <div className="container flex flex-1 items-center justify-center py-20 text-center">
           <div>
-            <h2 className="font-heading text-xl font-bold">Listing not found</h2>
-            <p className="mt-2 text-muted-foreground">This property may no longer be available.</p>
+            <h2 className="font-heading text-xl font-bold">Listing unavailable</h2>
+            <p className="mt-2 text-muted-foreground">{error || "This property may no longer be available."}</p>
             <Link to="/"><Button className="mt-4">Back to search</Button></Link>
           </div>
         </div>
@@ -65,12 +76,10 @@ const ListingDetailPage = () => {
       <Navbar />
 
       <main className="container py-6">
-        {/* Back */}
         <Link to="/" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Back to search
         </Link>
 
-        {/* Title */}
         <div className="mb-4">
           <h1 className="font-heading text-2xl font-bold text-foreground md:text-3xl">{listing.title}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -90,14 +99,10 @@ const ListingDetailPage = () => {
           </div>
         </div>
 
-        {/* Gallery */}
         <ImageGallery images={listing.images} title={listing.title} />
 
-        {/* Content grid */}
         <div className="mt-8 grid gap-8 lg:grid-cols-3">
-          {/* Left column */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Host + specs */}
+          <div className="space-y-8 lg:col-span-2">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-heading text-lg font-semibold">
@@ -116,27 +121,25 @@ const ListingDetailPage = () => {
               <img src={listing.hostAvatar} alt={listing.hostName} className="h-12 w-12 rounded-full object-cover ring-2 ring-border" />
             </div>
 
-            {/* Highlights */}
             <div className="flex flex-col gap-3">
               <div className="flex items-start gap-3">
                 <Award className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Superhost · Hosting since {listing.hostSince}</p>
-                  <p className="text-xs text-muted-foreground">{listing.hostResponseRate}% response rate</p>
+                  <p className="text-sm font-medium text-foreground">Reliable host · Hosting since {listing.hostSince}</p>
+                  <p className="text-xs text-muted-foreground">{listing.hostResponseRate}% response rate from the users service profile.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <Shield className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Every booking includes protection</p>
-                  <p className="text-xs text-muted-foreground">Free cancellation, secure payment, 24/7 support</p>
+                  <p className="text-sm font-medium text-foreground">Booking flow connected to availability + payment services</p>
+                  <p className="text-xs text-muted-foreground">Search, availability, and booking initiation call your live backend.</p>
                 </div>
               </div>
             </div>
 
             <Separator />
 
-            {/* Description */}
             <div>
               <h3 className="font-heading text-base font-semibold text-foreground">About this place</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{listing.description}</p>
@@ -144,7 +147,6 @@ const ListingDetailPage = () => {
 
             <Separator />
 
-            {/* Sleeping arrangements */}
             <div>
               <h3 className="font-heading text-base font-semibold text-foreground">Sleeping arrangements</h3>
               <div className="mt-3 flex gap-3 overflow-x-auto">
@@ -160,7 +162,6 @@ const ListingDetailPage = () => {
 
             <Separator />
 
-            {/* Amenities */}
             <div>
               <h3 className="font-heading text-base font-semibold text-foreground">Amenities</h3>
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -175,7 +176,6 @@ const ListingDetailPage = () => {
 
             <Separator />
 
-            {/* House rules */}
             <div>
               <h3 className="font-heading text-base font-semibold text-foreground">House rules</h3>
               <ul className="mt-3 space-y-1.5">
@@ -187,7 +187,6 @@ const ListingDetailPage = () => {
 
             <Separator />
 
-            {/* Cancellation */}
             <div>
               <h3 className="font-heading text-base font-semibold text-foreground">Cancellation policy</h3>
               <p className="mt-2 text-sm text-muted-foreground">{listing.cancellationPolicy}</p>
@@ -195,11 +194,8 @@ const ListingDetailPage = () => {
 
             <Separator />
 
-            {/* Reviews */}
             <div>
-              <h3 className="font-heading text-base font-semibold text-foreground">
-                Reviews ({listing.reviewCount})
-              </h3>
+              <h3 className="font-heading text-base font-semibold text-foreground">Reviews ({listing.reviewCount})</h3>
               <div className="mt-4 space-y-4">
                 {listing.reviews.map((review) => (
                   <div key={review.id} className="rounded-lg border border-border p-4">
@@ -221,31 +217,17 @@ const ListingDetailPage = () => {
             </div>
           </div>
 
-          {/* Right column - Booking panel (sticky on desktop) */}
           <div className="hidden lg:block">
             <div className="sticky top-24">
               <BookingPanel listing={listing} />
             </div>
           </div>
         </div>
-      </main>
 
-      {/* Mobile booking CTA */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card p-4 lg:hidden">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="font-heading text-lg font-bold">${listing.price}</span>
-            <span className="text-sm text-muted-foreground"> / night</span>
-          </div>
-          <Button
-            size="lg"
-            className="rounded-lg px-6"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          >
-            {listing.instantBook ? "Reserve" : "Request to Book"}
-          </Button>
+        <div className="mt-8 lg:hidden">
+          <BookingPanel listing={listing} />
         </div>
-      </div>
+      </main>
 
       <Footer />
     </div>

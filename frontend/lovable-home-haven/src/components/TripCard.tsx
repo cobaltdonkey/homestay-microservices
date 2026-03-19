@@ -2,7 +2,7 @@ import { Calendar, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import type { Booking } from "@/data/mockData";
+import type { Booking } from "@/lib/api";
 
 interface TripCardProps {
   booking: Booking;
