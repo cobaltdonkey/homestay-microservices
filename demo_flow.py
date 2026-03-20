@@ -102,17 +102,17 @@ def run_demo(guest_id, listing_id):
     def s6():
         print("  → Skipping auto-inspection: "
               "stayId required from stay_db")
-        print("  → Use host.html to submit inspection manually")
+        print("  → Use the React host workspace at /host to submit inspection manually")
         return None
 
-    step("Post-stay inspection (manual via host.html)", s6)
+    step("Post-stay inspection (manual via /host workspace)", s6)
 
     # Summary
     total = round(time.time() - demo_start, 2)
     print(f"\n=== DEMO COMPLETE in {total}s ===")
     print(f"  Booking ID: {booking_id}")
     print(f"  Final status: CONFIRMED")
-    print(f"  Next: open host.html to submit inspection for the stay")
+    print(f"  Next: open the React host workspace at /host to submit inspection for the stay")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ const Navbar = () => {
   const links = [
     { to: "/", label: "Explore", icon: Search },
     { to: "/trips", label: "Trips", icon: Map },
+    { to: "/host", label: "Host tools", icon: Building2 },
   ];
 
   return (
@@ -26,21 +27,17 @@ const Navbar = () => {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
-          {links.map((link) => (
-            <Link key={link.to} to={link.to}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "gap-2 font-medium",
-                  location.pathname === link.to && "bg-secondary text-foreground"
-                )}
-              >
-                <link.icon className="h-4 w-4" />
-                {link.label}
-              </Button>
-            </Link>
-          ))}
+          {links.map((link) => {
+            const isActive = location.pathname === link.to;
+            return (
+              <Link key={link.to} to={link.to}>
+                <Button variant="ghost" size="sm" className={cn("gap-2 font-medium", isActive && "bg-secondary text-foreground")}>
+                  <link.icon className="h-4 w-4" />
+                  {link.label}
+                </Button>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
@@ -58,20 +55,17 @@ const Navbar = () => {
       {mobileOpen && (
         <div className="animate-fade-in border-t border-border bg-card p-4 md:hidden">
           <nav className="flex flex-col gap-2">
-            {links.map((link) => (
-              <Link key={link.to} to={link.to} onClick={() => setMobileOpen(false)}>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "w-full justify-start gap-3",
-                    location.pathname === link.to && "bg-secondary"
-                  )}
-                >
-                  <link.icon className="h-4 w-4" />
-                  {link.label}
-                </Button>
-              </Link>
-            ))}
+            {links.map((link) => {
+              const isActive = location.pathname === link.to;
+              return (
+                <Link key={link.to} to={link.to} onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className={cn("w-full justify-start gap-3", isActive && "bg-secondary")}>
+                    <link.icon className="h-4 w-4" />
+                    {link.label}
+                  </Button>
+                </Link>
+              );
+            })}
           </nav>
         </div>
       )}

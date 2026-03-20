@@ -3,6 +3,7 @@ import { Map } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import TripCard from "@/components/TripCard";
+import DetailTable from "@/components/DetailTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { api, type Booking } from "@/lib/api";
@@ -15,6 +16,10 @@ const TripsPage = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [lookupId, setLookupId] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState("");
+  const [lookupBooking, setLookupBooking] = useState<BookingRecord | null>(null);
 
   useEffect(() => {
     const loadTrips = async () => {
@@ -65,6 +70,20 @@ const TripsPage = () => {
     loadTrips();
   }, []);
 
+  const runLookup = async () => {
+    setLookupLoading(true);
+    setLookupError("");
+    try {
+      const booking = await api.getBooking(lookupId.trim());
+      setLookupBooking(booking);
+    } catch (error) {
+      setLookupBooking(null);
+      setLookupError(error instanceof Error ? error.message : "Unable to load booking.");
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: "all", label: "All" },
     { key: "upcoming", label: "Upcoming" },
@@ -96,12 +115,8 @@ const TripsPage = () => {
                 "shrink-0 rounded-full",
                 activeTab === tab.key && "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
               )}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-            </Button>
-          ))}
-        </div>
+            </div>
+          </section>
 
         <div className="mt-6 space-y-4">
           {loading ? (

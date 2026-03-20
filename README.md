@@ -61,19 +61,19 @@ Fill these in after running `seed_data.py`:
 
 ### Scenario 1.1 — Instant Booking
 
-1. Open `guest.html`
-2. Enter Instant Listing ID and Guest ID
-3. Select check-in and check-out dates
-4. Click **Check Availability** → should show green ✓
-5. Select **Instant** booking mode
-6. Click **Reserve Now** → card shows `CONFIRMED`
+1. Open the React app at `/`
+2. Search for `Singapore` and choose the Orchard Road listing card
+3. Select check-in and check-out dates from the listing detail page
+4. Click **Check availability** → should show green success text
+5. Continue through guest info + payment
+6. Submit the booking → confirmation page shows `CONFIRMED`
 7. Check Docker logs for `[DEMO SMS]` confirmation messages
 
 ### Scenario 1.2 — Request Booking + Host Approve
 
-1. Guest: same flow but select **Request** mode → card shows `PENDING_HOST`
+1. Guest: same flow but choose the Marina Bay request-booking listing → confirmation shows `PENDING_HOST`
 2. Copy the Booking ID
-3. Open `host.html`, paste Booking ID, click **Load**
+3. Open the React app at `/host`, paste Booking ID, click **Load booking**
 4. Click **✓ Approve** → status changes to `CONFIRMED`
 
 ### Scenario 2.2 — Host Reject
@@ -85,7 +85,7 @@ Fill these in after running `seed_data.py`:
 ### Scenario 3.1.1 — Post-Stay Inspection (Good)
 
 1. Find a `stayId` (from booking logs or `stay_db`)
-2. Open `host.html` Section 2
+2. Open the React app at `/host` and use the **Submit inspection** section
 3. Enter stayId, select **GOOD**, add notes
 4. Click **Submit Inspection**
 5. Result shows `action=RELEASE`

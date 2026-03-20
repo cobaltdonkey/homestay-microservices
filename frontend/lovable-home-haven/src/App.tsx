@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import ListingDetail from "./pages/ListingDetail.tsx";
 import BookingPage from "./pages/BookingPage.tsx";
 import TripsPage from "./pages/TripsPage.tsx";
+import HostDashboard from "./pages/HostDashboard.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/listing/:id" element={<ListingDetail />} />
           <Route path="/booking/:id" element={<BookingPage />} />
           <Route path="/trips" element={<TripsPage />} />
+          <Route path="/host" element={<HostDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
