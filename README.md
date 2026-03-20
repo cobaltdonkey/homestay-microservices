@@ -27,8 +27,9 @@ Wait until all containers show as healthy — approximately 2 minutes.
 python seed_data.py
 ```
 
-Run the unified React frontend for both guest and host workflows:
+Open `frontend/host.html` in your browser for the host workflow.
 
+For the new Airbnb-style guest frontend:
 
 ```bash
 cd frontend/lovable-home-haven
@@ -36,7 +37,9 @@ npm install
 npm run dev
 ```
 
-Then open the Vite app URL shown in your terminal (defaults to `http://localhost:8080`). Use `/` for the guest experience, `/trips` for booking lookup/history, and `/host` for the host workspace.
+Then open the Vite app URL shown in your terminal (defaults to `http://localhost:8080`).
+
+The legacy guest demo remains available at `frontend/guest.html` if you need the original single-page flow.
 
 ---
 

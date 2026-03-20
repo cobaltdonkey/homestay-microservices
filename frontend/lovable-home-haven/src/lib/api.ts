@@ -13,9 +13,8 @@ import {
 } from "@/lib/listingContent";
 import { getStoredGuestProfile, saveStoredGuestProfile, type StoredGuestProfile, type StoredTrip } from "@/lib/tripStorage";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "/api" : "http://localhost:8000")).replace(/\/$/, "");
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const DEFAULT_PAYMENT_METHOD = "pm_card_visa";
-const NETWORK_ERROR_MESSAGE = "Unable to reach the backend API. Start the Docker stack and ensure Kong is reachable on port 8000.";
 
 interface ApiEnvelope<T> {
   code: number;
@@ -45,7 +44,7 @@ interface UserProfile {
   role: string;
 }
 
-export interface BookingRecord {
+interface BookingRecord {
   bookingId: string;
   guestId: string;
   hostId: string;
@@ -55,21 +54,6 @@ export interface BookingRecord {
   bookingMode: "INSTANT" | "REQUEST";
   status: string;
   createdAt: string;
-  paymentDueAt?: string | null;
-}
-
-export interface StayRecord {
-  stayId: string;
-  bookingId: string;
-  guestId: string;
-  hostId: string;
-  listingId: string;
-  checkInDate: string;
-  checkOutDate: string;
-  depositTxnId?: string | null;
-  depositAmount?: number | null;
-  depositStatus?: string | null;
-  checkoutTime?: string | null;
 }
 
 export interface Listing {
@@ -177,26 +161,15 @@ function mapStatus(status: string): Booking["status"] {
 }
 
 async function request<T>(path: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers || {});
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers,
-    });
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error(NETWORK_ERROR_MESSAGE);
-    }
-    throw error;
-  }
-
-  const raw = await response.text();
-  const payload = raw ? (JSON.parse(raw) as ApiEnvelope<T>) : null;
+  const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!response.ok || !payload) {
     throw new Error(payload?.message || `Request failed (${response.status})`);
   }
@@ -366,34 +339,6 @@ export const api = {
 
   async getBooking(bookingId: string) {
     return request<BookingRecord>(`/bookings/${encodeURIComponent(bookingId)}`);
-  },
-
-  async approveBooking(bookingId: string) {
-    return request<{ bookingId: string; status: string }>(`/bookings/${encodeURIComponent(bookingId)}/approve`, {
-      method: "POST",
-    });
-  },
-
-  async rejectBooking(bookingId: string) {
-    return request<{ bookingId: string; status: string }>(`/bookings/${encodeURIComponent(bookingId)}/reject`, {
-      method: "POST",
-    });
-  },
-
-  async getStay(stayId: string) {
-    return request<StayRecord>(`/stays/${encodeURIComponent(stayId)}`);
-  },
-
-  async resolveDeposit(stayId: string, conditionResult: "GOOD" | "BAD", notes: string) {
-    return request<{ stayId: string; action: string; depositStatus: string }>("/deposit-resolutions", {
-      method: "POST",
-      body: JSON.stringify({
-        stayId,
-        conditionResult,
-        notes,
-        photos: [],
-      }),
-    });
   },
 
   toTrip(record: StoredTrip | BookingRecord, listing?: Listing): Booking {
