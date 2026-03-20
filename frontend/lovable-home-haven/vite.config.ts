@@ -3,7 +3,26 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
+const proxiedPrefixes = [
+  "/search",
+  "/bookings",
+  "/listings",
+  "/availability",
+  "/users",
+  "/stays",
+  "/deposit-resolutions",
+];
+
+const proxy = Object.fromEntries(
+  proxiedPrefixes.map((prefix) => [
+    prefix,
+    {
+      target: "http://localhost:8000",
+      changeOrigin: true,
+    },
+  ])
+);
+
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -11,6 +30,7 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy,
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

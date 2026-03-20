@@ -1,27 +1,18 @@
 import { useState } from "react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
-import { ChevronLeft, Check, Loader2, MapPin, Calendar, Users, CreditCard, Shield, Zap } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Calendar, Check, ChevronLeft, CreditCard, Loader2, MapPin, Shield, Users, Zap } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { api, type Listing } from "@/data/mockData";
-import { format } from "date-fns";
+import { api, type BookingDraft } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { saveStoredTrip } from "@/lib/tripStorage";
 
-interface BookingState {
-  listing: Listing;
-  checkIn: string;
-  checkOut: string;
-  guests: number;
-  nights: number;
-  subtotal: number;
-  serviceFee: number;
-  cleaningFee: number;
-  total: number;
-}
+interface BookingState extends BookingDraft {}
 
 type Step = "details" | "guest-info" | "payment" | "confirmation";
 
@@ -32,17 +23,18 @@ const BookingPage = () => {
 
   const [step, setStep] = useState<Step>("details");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [guestInfo, setGuestInfo] = useState({ name: "", email: "", phone: "" });
-  const [bookingResult, setBookingResult] = useState<{ bookingId: string; status: string } | null>(null);
+  const [bookingResult, setBookingResult] = useState<{ bookingId: string; status: "confirmed" | "pending" | "cancelled" | "completed" } | null>(null);
 
-  if (!state) {
+  if (!state?.listing || !state.checkIn || !state.checkOut) {
     return (
       <div className="flex min-h-screen flex-col">
         <Navbar />
         <div className="container flex flex-1 items-center justify-center py-20 text-center">
           <div>
             <h2 className="font-heading text-xl font-bold">No booking details</h2>
-            <p className="mt-2 text-muted-foreground">Please select a listing first.</p>
+            <p className="mt-2 text-muted-foreground">Please choose dates and guests from a listing before booking.</p>
             <Link to="/"><Button className="mt-4">Browse listings</Button></Link>
           </div>
         </div>
@@ -63,24 +55,42 @@ const BookingPage = () => {
 
   const handleConfirmBooking = async () => {
     setLoading(true);
-    const result = await api.createBooking({
-      listingId: listing.id,
-      checkIn,
-      checkOut,
-      guests,
-      guestInfo,
-    });
-    setBookingResult(result);
-    setLoading(false);
-    setStep("confirmation");
+    setError("");
+
+    try {
+      const result = await api.createBooking(state, guestInfo);
+      saveStoredTrip({
+        bookingId: result.bookingId,
+        listingId: listing.listingId,
+        listingTitle: listing.title,
+        listingImage: listing.coverImage,
+        location: listing.location,
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        guests,
+        totalPrice: total,
+        status: result.status,
+        createdAt: new Date().toISOString(),
+      });
+      setBookingResult(result);
+      setStep("confirmation");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to complete booking.");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const confirmationTitle = bookingResult?.status === "confirmed" ? "Booking confirmed!" : "Request submitted!";
+  const confirmationBody = bookingResult?.status === "confirmed"
+    ? "Your reservation has been confirmed by the booking service."
+    : "Your booking request has been created and is waiting for host approval.";
 
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
 
       <main className="container flex-1 py-8">
-        {/* Back */}
         {step !== "confirmation" && (
           <button
             onClick={() => {
@@ -93,7 +103,6 @@ const BookingPage = () => {
           </button>
         )}
 
-        {/* Progress */}
         <div className="mb-8 flex items-center justify-center gap-2">
           {steps.map((s, i) => (
             <div key={s.key} className="flex items-center gap-2">
@@ -103,10 +112,7 @@ const BookingPage = () => {
               )}>
                 {i < currentStepIndex ? <Check className="h-4 w-4" /> : s.number}
               </div>
-              <span className={cn(
-                "hidden text-xs font-medium sm:inline",
-                i <= currentStepIndex ? "text-foreground" : "text-muted-foreground"
-              )}>
+              <span className={cn("hidden text-xs font-medium sm:inline", i <= currentStepIndex ? "text-foreground" : "text-muted-foreground")}>
                 {s.label}
               </span>
               {i < steps.length - 1 && <div className={cn("h-px w-8 transition-colors", i < currentStepIndex ? "bg-primary" : "bg-border")} />}
@@ -114,18 +120,17 @@ const BookingPage = () => {
           ))}
         </div>
 
-        <div className="mx-auto max-w-4xl grid gap-8 lg:grid-cols-5">
-          {/* Main content */}
+        <div className="mx-auto grid max-w-4xl gap-8 lg:grid-cols-5">
           <div className="lg:col-span-3">
             {step === "details" && (
               <div className="animate-fade-in space-y-6">
                 <h2 className="font-heading text-xl font-bold">Confirm your trip details</h2>
-                <div className="rounded-xl border border-border p-4 space-y-3">
+                <div className="space-y-3 rounded-xl border border-border p-4">
                   <div className="flex items-center gap-3">
                     <img src={listing.coverImage} alt={listing.title} className="h-16 w-16 rounded-lg object-cover" />
                     <div>
                       <h3 className="font-heading text-sm font-semibold">{listing.title}</h3>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{listing.location}</p>
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{listing.location}</p>
                     </div>
                   </div>
                   <Separator />
@@ -142,41 +147,35 @@ const BookingPage = () => {
             {step === "guest-info" && (
               <div className="animate-fade-in space-y-6">
                 <h2 className="font-heading text-xl font-bold">Guest information</h2>
+                <p className="text-sm text-muted-foreground">We create and reuse a guest profile behind the scenes, so travelers never need to paste a guest ID manually.</p>
                 <div className="space-y-4">
                   <div><Label htmlFor="name">Full name</Label><Input id="name" placeholder="John Doe" value={guestInfo.name} onChange={(e) => setGuestInfo({ ...guestInfo, name: e.target.value })} className="mt-1" /></div>
                   <div><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="john@example.com" value={guestInfo.email} onChange={(e) => setGuestInfo({ ...guestInfo, email: e.target.value })} className="mt-1" /></div>
                   <div><Label htmlFor="phone">Phone number</Label><Input id="phone" type="tel" placeholder="+1 (555) 000-0000" value={guestInfo.phone} onChange={(e) => setGuestInfo({ ...guestInfo, phone: e.target.value })} className="mt-1" /></div>
                 </div>
-                <Button
-                  className="w-full py-6"
-                  size="lg"
-                  disabled={!guestInfo.name || !guestInfo.email}
-                  onClick={() => setStep("payment")}
-                >
-                  Continue to payment
-                </Button>
+                <Button className="w-full py-6" size="lg" disabled={!guestInfo.name || !guestInfo.email || !guestInfo.phone} onClick={() => setStep("payment")}>Continue to payment</Button>
               </div>
             )}
 
             {step === "payment" && (
               <div className="animate-fade-in space-y-6">
                 <h2 className="font-heading text-xl font-bold">Payment</h2>
-                <div className="rounded-xl border border-border p-4 space-y-4">
+                <div className="space-y-4 rounded-xl border border-border p-4">
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">Card details</span>
+                    <span className="text-sm font-medium">Checkout experience</span>
                   </div>
-                  {/* Placeholder payment fields — replace with Stripe Elements or your payment SDK */}
                   <Input placeholder="Card number" className="font-mono" />
                   <div className="grid grid-cols-2 gap-3">
                     <Input placeholder="MM / YY" />
                     <Input placeholder="CVC" />
                   </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Shield className="h-3 w-3" />
-                    Payment details are placeholders for integration. Connect your payment gateway here.
+                    The visual checkout is polished, while the backend currently uses the demo payment method token `pm_card_visa`.
                   </p>
                 </div>
+                {error && <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
                 <Button className="w-full py-6" size="lg" onClick={handleConfirmBooking} disabled={loading}>
                   {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</> : `Confirm & Pay $${total}`}
                 </Button>
@@ -192,15 +191,9 @@ const BookingPage = () => {
                     <Zap className="h-8 w-8 text-warning" />
                   )}
                 </div>
-                <h2 className="font-heading text-2xl font-bold">
-                  {bookingResult.status === "confirmed" ? "Booking confirmed!" : "Request submitted!"}
-                </h2>
-                <p className="text-muted-foreground">
-                  {bookingResult.status === "confirmed"
-                    ? "You're all set! Your reservation has been confirmed."
-                    : "Your booking request has been sent to the host. You'll be notified once they respond."}
-                </p>
-                <div className="mx-auto max-w-sm rounded-xl border border-border bg-secondary/50 p-4 text-left text-sm space-y-2">
+                <h2 className="font-heading text-2xl font-bold">{confirmationTitle}</h2>
+                <p className="text-muted-foreground">{confirmationBody}</p>
+                <div className="mx-auto max-w-sm space-y-2 rounded-xl border border-border bg-secondary/50 p-4 text-left text-sm">
                   <p><span className="text-muted-foreground">Booking ID:</span> <span className="font-mono font-medium">{bookingResult.bookingId}</span></p>
                   <p><span className="text-muted-foreground">Property:</span> <span className="font-medium">{listing.title}</span></p>
                   <p><span className="text-muted-foreground">Dates:</span> <span className="font-medium">{format(new Date(checkIn), "MMM d")} – {format(new Date(checkOut), "MMM d, yyyy")}</span></p>
@@ -214,14 +207,13 @@ const BookingPage = () => {
             )}
           </div>
 
-          {/* Summary sidebar */}
           {step !== "confirmation" && (
             <div className="hidden lg:col-span-2 lg:block">
-              <div className="sticky top-24 rounded-xl border border-border bg-card p-5 space-y-4">
+              <div className="sticky top-24 space-y-4 rounded-xl border border-border bg-card p-5">
                 <div className="flex items-center gap-3">
                   <img src={listing.coverImage} alt={listing.title} className="h-14 w-14 rounded-lg object-cover" />
                   <div>
-                    <h4 className="text-sm font-semibold line-clamp-1">{listing.title}</h4>
+                    <h4 className="line-clamp-1 text-sm font-semibold">{listing.title}</h4>
                     <p className="text-xs text-muted-foreground">{listing.location}</p>
                   </div>
                 </div>

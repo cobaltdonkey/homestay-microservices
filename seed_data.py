@@ -72,8 +72,8 @@ def seed_all():
     print(f"Instant Listing ID: {listing_ids[0]}")
     print(f"Request Listing ID: {listing_ids[1]}")
     print(f"Alt Listing ID:     {listing_ids[2]}")
-    print("\nPaste these IDs into guest.html and host.html")
-    print(f"Set DEMO_HOST_ID = '{host_id}' in host.html")
+    print("\nUse these IDs in the React frontend routes `/`, `/trips`, and `/host`.")
+    print(f"Host workspace reads the host from booking/stay data automatically (seeded host: {host_id})")
 
 
 def reset_all():
