@@ -13,7 +13,7 @@ import {
 } from "@/lib/listingContent";
 import { getStoredGuestProfile, saveStoredGuestProfile, type StoredGuestProfile, type StoredTrip } from "@/lib/tripStorage";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "/api" : "http://localhost:8000")).replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "" : "http://localhost:8000")).replace(/\/$/, "");
 const DEFAULT_PAYMENT_METHOD = "pm_card_visa";
 const NETWORK_ERROR_MESSAGE = "Unable to reach the backend API. Start the Docker stack and ensure Kong is reachable on port 8000.";
 
