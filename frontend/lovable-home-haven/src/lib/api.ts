@@ -196,7 +196,15 @@ async function request<T>(path: string, init?: RequestInit) {
   }
 
   const raw = await response.text();
-  const payload = raw ? (JSON.parse(raw) as ApiEnvelope<T>) : null;
+  let payload: ApiEnvelope<T> | null = null;
+  if (raw) {
+    try {
+      payload = JSON.parse(raw) as ApiEnvelope<T>;
+    } catch {
+      throw new Error(`Invalid response format from server (${response.status}).`);
+    }
+  }
+
   if (!response.ok || !payload) {
     throw new Error(payload?.message || `Request failed (${response.status})`);
   }

@@ -59,11 +59,12 @@ def seed_all():
     # Step 4 — Index listings in search
     for i, lid in enumerate(listing_ids):
         l = listings_to_create[i]
-        requests.post(f"{API_BASE}/search/listings/index",
+        r = requests.post(f"{API_BASE}/search/listings/index",
             json={"listingId": lid, "hostId": host_id,
                   "title": l["title"], "location": l["location"],
                   "pricePerNight": l["pricePerNight"],
                   "bookingMode": l["bookingMode"]})
+        r.raise_for_status()
 
     # Step 5 — Print summary
     print("\n=== SEED COMPLETE ===")
