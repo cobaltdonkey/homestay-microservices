@@ -69,14 +69,13 @@ services:
   booking-service:
     build:
       context: ./services/booking-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/booking_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${BOOKING_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: booking-service
       PORT: 5001
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -91,14 +90,13 @@ services:
   deposit-resolution:
     build:
       context: ./services/deposit-resolution
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/deposit_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${DEPOSIT_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: deposit-resolution
       PORT: 5002
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -113,14 +111,13 @@ services:
   users-service:
     build:
       context: ./services/users-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/user_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${USER_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: users-service
       PORT: 5003
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -135,14 +132,13 @@ services:
   listings-service:
     build:
       context: ./services/listings-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/listings_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${LISTINGS_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: listings-service
       PORT: 5004
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -157,14 +153,13 @@ services:
   availability-service:
     build:
       context: ./services/availability-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/availability_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${AVAILABILITY_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: availability-service
       PORT: 5005
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -179,14 +174,13 @@ services:
   stay-service:
     build:
       context: ./services/stay-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/stay_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${STAY_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: stay-service
       PORT: 5006
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -201,14 +195,13 @@ services:
   inspection-service:
     build:
       context: ./services/inspection-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/inspection_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${INSPECTION_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: inspection-service
       PORT: 5007
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -223,14 +216,13 @@ services:
   payment-logs-service:
     build:
       context: ./services/payment-logs-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/payment_logs_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${PAYMENT_LOGS_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: payment-logs-service
       PORT: 5008
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -245,14 +237,13 @@ services:
   listings-search-service:
     build:
       context: ./services/listings-search-service
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/search_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${SEARCH_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: listings-search-service
       PORT: 5009
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -267,16 +258,15 @@ services:
   payment-gateway-wrapper:
     build:
       context: ./services/payment-gateway-wrapper
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/payment_logs_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${PAYMENT_LOGS_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: payment-gateway-wrapper
       PORT: 5010
-      STRIPE_SECRET_KEY: sk_test_placeholder
-      STRIPE_DEMO_MODE: "true"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_DEMO_MODE: ${STRIPE_DEMO_MODE}
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -291,18 +281,17 @@ services:
   notification-gateway:
     build:
       context: ./services/notification-gateway
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/notification_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: ${NOTIFICATION_DB_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: notification-gateway
       PORT: 5011
-      TWILIO_ACCOUNT_SID: placeholder
-      TWILIO_AUTH_TOKEN: placeholder
-      TWILIO_FROM_NUMBER: +15005550006
-      TWILIO_DEMO_MODE: "true"
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+      TWILIO_DEMO_MODE: ${TWILIO_DEMO_MODE}
     depends_on:
-      mysql:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
@@ -321,8 +310,9 @@ services:
   booking-expirer:
     build:
       context: ./workers/booking-expirer
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/booking_db
+      DATABASE_URL: ${BOOKING_EXPIRER_DB_URL}
       BOOKING_SERVICE_URL: http://booking-service:5001
     depends_on:
       - booking-service
@@ -333,8 +323,9 @@ services:
   deposit-expirer:
     build:
       context: ./workers/deposit-expirer
+    env_file: .env
     environment:
-      DATABASE_URL: mysql+pymysql://appuser:apppassword@mysql:3306/stay_db
+      DATABASE_URL: ${DEPOSIT_EXPIRER_DB_URL}
       DEPOSIT_RESOLUTION_URL: http://deposit-resolution:5002
       INSPECTION_SERVICE_URL: http://inspection-service:5007
     depends_on:

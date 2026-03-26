@@ -7,8 +7,8 @@ services:
       - name: booking-route
         paths:
           - /bookings
-        methods: ["GET", "POST", "PATCH", "OPTIONS"]
-        strip_path: true
+        methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"]
+        strip_path: false
 
   - name: deposit-resolution-service
     url: http://deposit-resolution:5002
@@ -17,7 +17,7 @@ services:
         paths:
           - /deposit-resolutions
         methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: users-service
     url: http://users-service:5003
@@ -25,8 +25,8 @@ services:
       - name: users-route
         paths:
           - /users
-        methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        strip_path: false
 
   - name: listings-service
     url: http://listings-service:5004
@@ -34,8 +34,8 @@ services:
       - name: listings-route
         paths:
           - /listings
-        methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        strip_path: false
 
   - name: availability-service
     url: http://availability-service:5005
@@ -44,7 +44,7 @@ services:
         paths:
           - /availability
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: stay-service
     url: http://stay-service:5006
@@ -53,7 +53,7 @@ services:
         paths:
           - /stays
         methods: ["GET", "POST", "PATCH", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: inspection-service
     url: http://inspection-service:5007
@@ -62,7 +62,7 @@ services:
         paths:
           - /inspections
         methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: payment-logs-service
     url: http://payment-logs-service:5008
@@ -71,7 +71,7 @@ services:
         paths:
           - /payment-logs
         methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: listings-search-service
     url: http://listings-search-service:5009
@@ -80,7 +80,7 @@ services:
         paths:
           - /search
         methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   - name: payment-gateway-wrapper
     url: http://payment-gateway-wrapper:5010
@@ -89,7 +89,7 @@ services:
         paths:
           - /gateway
         methods: ["GET", "POST", "OPTIONS"]
-        strip_path: true
+        strip_path: false
         plugins:
           - name: rate-limiting
             config:
@@ -103,7 +103,7 @@ services:
         paths:
           - /notification-gateway
         methods: ["GET", "OPTIONS"]
-        strip_path: true
+        strip_path: false
 
   # Handling /health-all differently as requested
   # Pointing to a dummy/placeholder upstream for now
@@ -114,7 +114,8 @@ services:
         paths:
           - /health-all
         methods: ["GET"]
-        strip_path: true
+        strip_path: false
+
 
 plugins:
   - name: correlation-id

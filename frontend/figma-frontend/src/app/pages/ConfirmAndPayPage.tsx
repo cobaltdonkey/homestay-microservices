@@ -1,0 +1,374 @@
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router';
+import { Navbar } from '../components/Navbar';
+import { ArrowLeft, Star, Clock } from 'lucide-react';
+
+export function ConfirmAndPayPage() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const location = useLocation();
+  const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [timeLeft, setTimeLeft] = useState(15); // 15-second soft hold
+  const [holdId, setHoldId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasRedirected = useRef(false);
+
+  // Read booking context from router state
+  const routeState = location.state as any || {};
+  const storedUser = localStorage.getItem('secondhome_user');
+  const currentUser = storedUser ? JSON.parse(storedUser) : null;
+  const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
+
+  // Listing summary from router state (passed from ListingDetailPage)
+  const listing = {
+    id: id ?? '',
+    title: routeState.listingTitle ?? 'Selected Listing',
+    imageUrl: routeState.imageUrl ?? 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=300&q=80',
+    rating: routeState.rating ?? 4.9,
+    reviewCount: routeState.reviewCount ?? 0,
+    price: routeState.price ?? 0,
+    nights: routeState.nights ?? 1,
+    cleaningFee: 30,
+    deposit: 200,
+    hostId: routeState.hostId ?? 'af112c4e-8b77-46ac-9014-7cdb291e0023',
+  };
+
+  const checkIn: string = routeState.checkIn ?? '';
+  const checkOut: string = routeState.checkOut ?? '';
+
+  const total = listing.price * listing.nights + listing.cleaningFee + listing.deposit;
+  const splitAmount = total / 2;
+
+  // POST /availability/hold on mount
+  useEffect(() => {
+    if (!id || !checkIn || !checkOut) return;
+    const createHold = async () => {
+      try {
+        const res = await fetch('/availability/hold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            listingId: id,
+            guestId,
+            checkInDate: checkIn,
+            checkOutDate: checkOut,
+            ttlSeconds: 15,
+          }),
+        });
+        const json = await res.json();
+        if (json.code === 201) setHoldId(json.data?.holdId ?? null);
+      } catch (err) {
+        console.error('Hold failed:', err);
+      }
+    };
+    createHold();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1 && !hasRedirected.current) {
+          hasRedirected.current = true;
+          setTimeout(() => {
+            alert('Payment session expired. Please try again.');
+            navigate(-1);
+          }, 0);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [navigate]);
+
+  const handleConfirm = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      // Step 1: Simulate gateway charge (POST /gateway/charge)
+      const gatewayRes = await fetch('/gateway/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: total,
+          currency: 'SGD',
+          paymentMethodId: `card_${cardNumber.replace(/\s/g,'').slice(-4) || 'demo'}`,
+          description: `Booking for listing ${id}`,
+        }),
+      });
+      const gatewayJson = await gatewayRes.json();
+      const paymentTxnId = gatewayJson.data?.transactionId ?? 'txn_demo';
+      const paymentMethodId = gatewayJson.data?.paymentMethodId ?? 'card_demo';
+
+      // Step 2: Create booking (POST /bookings)
+      const bookingRes = await fetch('/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId,
+          hostId: listing.hostId,
+          listingId: id,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
+          paymentMethodId,
+          paymentTxnId,
+          holdId,
+          bookingMode: 'INSTANT',
+        }),
+      });
+      const bookingJson = await bookingRes.json();
+      if (bookingJson.code === 201 || bookingJson.code === 200) {
+        navigate(`/booking/confirmed/${bookingJson.data?.bookingId ?? id}`);
+      } else {
+        alert(bookingJson.message ?? 'Booking failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Booking failed:', err);
+      alert('Booking failed. Is the backend running?');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2, 4);
+    setExpiry(value);
+  };
+
+  return (
+    <div className="min-h-screen bg-white">
+      <Navbar />
+
+      <div className="max-w-[1440px] mx-auto px-6 lg:px-20 py-8">
+        {/* Back Arrow */}
+        <button 
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-[#222222] hover:text-[#717171] mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          <span className="font-semibold">Back</span>
+        </button>
+
+        <h1 className="text-3xl font-semibold text-[#222222] mb-8">Confirm and pay</h1>
+
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-3 gap-16">
+          {/* LEFT COLUMN */}
+          <div className="col-span-2 space-y-8">
+            {/* Section 1: Choose when to pay */}
+            <div>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">
+                1. Choose when to pay
+              </h2>
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-[#222222] transition-colors"
+                  style={{ borderColor: paymentOption === 'full' ? '#222222' : '#EBEBEB' }}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="full"
+                    checked={paymentOption === 'full'}
+                    onChange={() => setPaymentOption('full')}
+                    className="mt-1 accent-[#FF385C]"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-[#222222]">
+                      Pay SGD {total.toLocaleString()} now
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-[#222222] transition-colors"
+                  style={{ borderColor: paymentOption === 'split' ? '#222222' : '#EBEBEB' }}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="split"
+                    checked={paymentOption === 'split'}
+                    onChange={() => setPaymentOption('split')}
+                    className="mt-1 accent-[#FF385C]"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-[#222222]">
+                      Pay part now, part later
+                    </div>
+                    <div className="text-sm text-[#717171] mt-1">
+                      SGD {splitAmount.toLocaleString()} now, SGD {splitAmount.toLocaleString()} later
+                    </div>
+                    <button className="text-sm text-[#FF385C] hover:text-[#E31C5F] font-semibold mt-2 underline">
+                      More info
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Section 2: Add a payment method */}
+            <div>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">
+                2. Add a payment method
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-[#222222] mb-2">
+                    Card number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="1234 5678 9012 3456"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#222222] mb-2">
+                      Expiry
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MM / YY"
+                      value={expiry}
+                      onChange={handleExpiryChange}
+                      maxLength={5}
+                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#222222] mb-2">
+                      CVC
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="123"
+                      value={cvc}
+                      onChange={(e) => setCvc(e.target.value)}
+                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#222222] mb-2">
+                    Name on card
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    value={cardName}
+                    onChange={(e) => setCardName(e.target.value)}
+                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Review your reservation */}
+            <div>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">
+                3. Review your reservation
+              </h2>
+              <div className="space-y-3 border border-[#EBEBEB] rounded-lg p-4">
+                <div className="flex justify-between">
+                  <span className="text-[#717171]">Check-in</span>
+                  <span className="font-semibold text-[#222222]">15 Jun 2025</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#717171]">Check-out</span>
+                  <span className="font-semibold text-[#222222]">18 Jun 2025</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#717171]">Guests</span>
+                  <span className="font-semibold text-[#222222]">2</span>
+                </div>
+                <div className="border-t border-[#EBEBEB] pt-3">
+                  <span className="text-sm text-[#717171]">Cancellation policy</span>
+                  <p className="text-sm text-[#222222] mt-1">
+                    Free cancellation before 12 Jun.{' '}
+                    <button className="text-[#FF385C] hover:text-[#E31C5F] font-semibold underline">
+                      Full policy
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN - Sticky Summary */}
+          <div className="col-span-1">
+            <div className="sticky top-24 border border-[#EBEBEB] rounded-xl p-6 shadow-lg">
+              {/* Listing Info */}
+              <div className="flex gap-4 mb-6 pb-6 border-b border-[#EBEBEB]">
+                <img
+                  src={listing.imageUrl}
+                  alt={listing.title}
+                  className="w-24 h-24 rounded-lg object-cover"
+                />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-[#222222] mb-1">{listing.title}</h3>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-[#222222] stroke-[#222222]" />
+                    <span className="text-sm font-semibold text-[#222222]">{listing.rating}</span>
+                    <span className="text-sm text-[#717171]">({listing.reviewCount})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Breakdown */}
+              <div className="space-y-3 mb-4 pb-4 border-b border-[#EBEBEB]">
+                <div className="flex justify-between text-[#222222]">
+                  <span>SGD {listing.price} × {listing.nights} nights</span>
+                  <span>SGD {listing.price * listing.nights}</span>
+                </div>
+                <div className="flex justify-between text-[#222222]">
+                  <span>Cleaning fee</span>
+                  <span>SGD {listing.cleaningFee}</span>
+                </div>
+                <div className="flex justify-between text-[#222222]">
+                  <span>Refundable deposit</span>
+                  <span>SGD {listing.deposit}</span>
+                </div>
+              </div>
+
+              {/* Total */}
+              <div className="flex justify-between font-semibold text-[#222222] text-lg mb-6">
+                <span>Total</span>
+                <span>SGD {total.toLocaleString()}</span>
+              </div>
+
+              {/* Confirm Button */}
+              <button
+                onClick={handleConfirm}
+                className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors mb-3"
+              >
+                Confirm and pay
+              </button>
+
+              {/* Note */}
+              <p className="text-xs text-center text-[#717171]">
+                You won't be charged yet until confirmed
+              </p>
+
+              {/* Countdown Timer */}
+              <div className="flex items-center justify-center text-sm text-[#FF385C] font-semibold">
+                <Clock className="w-4 h-4 mr-1" />
+                {timeLeft} seconds left
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
