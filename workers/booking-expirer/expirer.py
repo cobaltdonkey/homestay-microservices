@@ -1,14 +1,22 @@
 import os
 import time
 import requests
-from datetime import datetime
 from sqlalchemy import create_engine, text
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Ensure sslmode is in the URL (psycopg2 needs it in the connection string, not connect_args)
+if DATABASE_URL and "sslmode" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
 BOOKING_SERVICE_URL = os.environ.get("BOOKING_SERVICE_URL", "http://booking-service:5001")
 
 
 def wait_for_db():
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL is not set")
+    print(f"[EXPIRER] Connecting to DB (host: {DATABASE_URL.split('@')[-1].split('/')[0]})", flush=True)
     engine = create_engine(DATABASE_URL)
     for attempt in range(1, 21):
         try:
@@ -29,16 +37,13 @@ def run_cycle(engine):
         result = conn.execute(text(
             "SELECT booking_id FROM booking "
             "WHERE status='AWAITING_PAYMENT' "
-            "AND payment_due_at < UTC_TIMESTAMP() "
+            "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
         ))
-        rows = result.fetchall()
-        for row in rows:
+        for row in result.fetchall():
             bid = row[0]
             try:
-                r = requests.post(
-                    f"{BOOKING_SERVICE_URL}/bookings/{bid}/payment-timeout",
-                    timeout=10)
+                r = requests.post(f"{BOOKING_SERVICE_URL}/bookings/{bid}/payment-timeout", timeout=10)
                 print(f"[EXPIRER] Payment timeout {bid}: {r.status_code}", flush=True)
             except Exception as e:
                 print(f"[EXPIRER] Error for {bid}: {e}", flush=True)
@@ -47,16 +52,13 @@ def run_cycle(engine):
         result = conn.execute(text(
             "SELECT booking_id FROM booking "
             "WHERE status='PENDING_HOST' "
-            "AND payment_due_at < UTC_TIMESTAMP() "
+            "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
         ))
-        rows = result.fetchall()
-        for row in rows:
+        for row in result.fetchall():
             bid = row[0]
             try:
-                r = requests.post(
-                    f"{BOOKING_SERVICE_URL}/bookings/{bid}/expire",
-                    timeout=10)
+                r = requests.post(f"{BOOKING_SERVICE_URL}/bookings/{bid}/expire", timeout=10)
                 print(f"[EXPIRER] Expired {bid}: {r.status_code}", flush=True)
             except Exception as e:
                 print(f"[EXPIRER] Error for {bid}: {e}", flush=True)
