@@ -31,6 +31,10 @@ export default defineConfig({
       '/gateway': 'http://localhost:8000',
       '/stays': 'http://localhost:8000',
       '/notifications': 'http://localhost:8000',
+      '/inspections': 'http://localhost:8000',
+      '/payment-logs': 'http://localhost:8000',
+      '/deposit-resolutions': 'http://localhost:8000',
+      '/notification-gateway': 'http://localhost:8000',
     },
   },
 })

@@ -31,12 +31,12 @@ Run the unified React frontend for both guest and host workflows:
 
 
 ```bash
-cd frontend/lovable-home-haven
+cd frontend/figma-frontend
 npm install
 npm run dev
 ```
 
-Then open the Vite app URL shown in your terminal (defaults to `http://localhost:8080`). Use `/` for the guest experience, `/trips` for booking lookup/history, and `/host` for the host workspace.
+Then open the Vite app URL shown in your terminal (defaults to `http://localhost:5173`). The app provides a integrated experience for both guests (landing page, search, bookings) and hosts (dashboard hub).
 
 ---
 

@@ -29,7 +29,7 @@ def run_cycle(engine):
         result = conn.execute(text(
             "SELECT booking_id FROM booking "
             "WHERE status='AWAITING_PAYMENT' "
-            "AND payment_due_at < UTC_TIMESTAMP() "
+            "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
         ))
         rows = result.fetchall()

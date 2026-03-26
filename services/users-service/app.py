@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def create_app():
-    app = Flask(name)
+    app = Flask(__name__)
 
     # Use USER_DB_URL (from your .env)
     database_url = os.environ.get('USER_DB_URL')
@@ -26,7 +26,7 @@ def create_app():
     return app
 
 
-if name == 'main':
+if __name__ == '__main__':
     app = create_app()
     port = int(os.environ.get('PORT', 5003))
     app.run(host='0.0.0.0', port=port)

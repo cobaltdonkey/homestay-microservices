@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 from flask import Flask
 from db import db
 
@@ -27,3 +30,4 @@ if __name__ == '__main__':
         port=int(os.environ.get('PORT', 5002)),
         debug=False
     )
+

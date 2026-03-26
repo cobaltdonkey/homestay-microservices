@@ -23,6 +23,7 @@ def health():
 
 @main.route('/capture', methods=['POST'])
 @main.route('/gateway/capture', methods=['POST'])
+@main.route('/gateway/charge', methods=['POST'])
 def capture():
     data = request.json or {}
     booking_id = data.get('bookingId')
@@ -58,6 +59,7 @@ def capture():
 
 @main.route('/authorise', methods=['POST'])
 @main.route('/gateway/authorise', methods=['POST'])
+@main.route('/gateway/authorize', methods=['POST'])
 def authorise():
     data = request.json or {}
     booking_id = data.get('bookingId')

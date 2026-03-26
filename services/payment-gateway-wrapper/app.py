@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 from flask import Flask
 from routes import main
 
@@ -11,3 +14,4 @@ if __name__ == '__main__':
     app = create_app()
     port = int(os.environ.get('PORT', 5010))
     app.run(host='0.0.0.0', port=port)
+

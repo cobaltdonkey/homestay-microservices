@@ -69,6 +69,7 @@ def get_availability():
         "message": "success"
     }), 200
 
+@main.route('/availability/hold', methods=['POST'])
 @main.route('/holds', methods=['POST'])
 def create_hold():
     data = request.json or {}

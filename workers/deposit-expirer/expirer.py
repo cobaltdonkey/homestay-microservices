@@ -27,7 +27,7 @@ def run_cycle(engine):
         result = conn.execute(text(
             "SELECT stay_id FROM stay "
             "WHERE deposit_status = 'HELD' "
-            "AND checkout_time + INTERVAL 48 HOUR < UTC_TIMESTAMP() "
+            "AND checkout_time + INTERVAL '48 hours' < CURRENT_TIMESTAMP "
             "LIMIT 50"
         ))
         rows = result.fetchall()

@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 import threading
 from flask import Flask
 from db import db
@@ -29,3 +32,4 @@ if __name__ == '__main__':
     consumer_thread.start()
 
     app.run(host='0.0.0.0', port=port)
+
