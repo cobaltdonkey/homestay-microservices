@@ -26,14 +26,25 @@ CREATE TABLE booking (
 
 USE user_db;
 CREATE TABLE user_profile (
-  user_id VARCHAR(36) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(150) NOT NULL UNIQUE,
-  phone_number VARCHAR(20) NOT NULL,
-  role ENUM('guest','host') NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP 
-             ON UPDATE CURRENT_TIMESTAMP
+  user_id      VARCHAR(36)  PRIMARY KEY,
+  name         VARCHAR(100) NOT NULL,
+  email        VARCHAR(150) NOT NULL UNIQUE,
+  phone_number VARCHAR(20)  NOT NULL,
+  role         ENUM('guest','host') NOT NULL,
+  password     VARCHAR(255) NOT NULL,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+               ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE user_session (
+  session_id   VARCHAR(36)  PRIMARY KEY,
+  user_id      VARCHAR(36)  NOT NULL,
+  logged_in_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  logged_out_at DATETIME,
+  is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
+  INDEX idx_user_id (user_id)
 );
 
 USE listings_db;
