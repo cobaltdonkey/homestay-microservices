@@ -23,8 +23,14 @@ docker compose up --build
 
 Wait until all containers show as healthy — approximately 2 minutes.
 
+Seed the database with verified demo data (listings, users, check-ins):
+
 ```bash
-python seed_data.py
+# Option A: Run from your host machine (requires python + requests)
+python infra/seed_supabase.py
+
+# Option B: Run from within the Docker container (no host dependencies)
+docker exec homestay-microservices-listings-service-1 python /app/infra/seed_supabase.py
 ```
 
 Run the unified React frontend for both guest and host workflows:
@@ -40,17 +46,13 @@ Then open the Vite app URL shown in your terminal (defaults to `http://localhost
 
 ---
 
-## Demo IDs
+## Demo Credentials
 
-Fill these in after running `seed_data.py`:
+The platform is pre-seeded with the following test account:
 
-| Field            | Value |
-|------------------|-------|
-| Guest ID         | `___________________________` |
-| Host ID          | `___________________________` |
-| Instant Listing  | `___________________________` |
-| Request Listing  | `___________________________` |
-| Alt Listing      | `___________________________` |
+- **Email**: `alice2@demo.com`
+- **Password**: `password123`
+- **Role**: `guest`
 
 ---
 
@@ -98,7 +100,7 @@ Fill these in after running `seed_data.py`:
 
 1. Set deposit-expirer sleep to 30s for testing:
    change `time.sleep(300)` to `time.sleep(30)` in `workers/deposit-expirer/expirer.py`
-2. Manually set a stay's `checkout_time` to 49 hours ago in MySQL
+2. Manually set a stay's `checkout_time` to 49 hours ago in PostgreSQL
 3. Wait one expirer cycle
 4. Docker logs show `[DEP-EXPIRER] Auto-release` triggered
 
@@ -106,21 +108,18 @@ Fill these in after running `seed_data.py`:
 
 ## Switching to Live Mode (Final Demo Only)
 
-In `docker-compose.yml`, change:
+API configuration is handled via the `.env` file in the root directory.
 
-```yaml
-STRIPE_DEMO_MODE: "false"
-STRIPE_SECRET_KEY: sk_test_<your-key>
-TWILIO_DEMO_MODE: "false"
-TWILIO_ACCOUNT_SID: <your-sid>
-TWILIO_AUTH_TOKEN: <your-token>
-TWILIO_FROM_NUMBER: <your-twilio-number>
-```
+To use your own keys, update `.env`:
+- `STRIPE_SECRET_KEY`: Your Stripe secret key
+- `STRIPE_DEMO_MODE`: Set to `false` for live calls
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`: Your Twilio credentials
+- `TWILIO_DEMO_MODE`: Set to `false` for live SMS
 
-Then:
+Then restart the stack:
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
 ---
@@ -138,7 +137,13 @@ docker compose up --build
 
 ## Architecture
 
-[Brief paragraph — write your own for the report]
+The platform follows a **Microservices Architecture** with a **Shared Database (Supabase PostgreSQL)** and **Event-Driven Notifications (RabbitMQ)**.
+
+- **Kong Gateway**: Handles all incoming API requests (Port 8000), routing to internal services and managing CORS/DNS.
+- **Atomic Services**: `users`, `listings`, `stay`, etc. manage individual business domains.
+- **Composite Services**: `booking-service` orchestrates complex flows across multiple atomic services.
+- **Workers**: `booking-expirer` and `deposit-expirer` handle time-based events (e.g., releasing deposits after 48h).
+- **Communication**: Services use synchronous REST for queries and asynchronous RabbitMQ topics for side effects (SMS).
 
 See `/docs/api-contracts.md` for all endpoint schemas.
 See `/docs/event-schemas.md` for all AMQP event payloads.
@@ -147,21 +152,19 @@ See `/docs/event-schemas.md` for all AMQP event payloads.
 
 ## Service Registry
 
-| Service | Port | Database |
-|---------|------|----------|
-| booking-service | 5001 | booking_db |
-| deposit-resolution | 5002 | deposit_db |
-| users-service | 5003 | user_db |
-| listings-service | 5004 | listings_db |
-| availability-service | 5005 | availability_db |
-| stay-service | 5006 | stay_db |
-| inspection-service | 5007 | inspection_db |
-| payment-logs-service | 5008 | payment_logs_db |
-| listings-search-service | 5009 | search_db |
+| Service | Port | Database (Supabase) |
+|---------|------|---------------------|
+| booking-service | 5001 | Shared `postgres` |
+| deposit-resolution | 5002 | Shared `postgres` |
+| users-service | 5003 | Shared `postgres` |
+| listings-service | 5004 | Shared `postgres` |
+| availability-service | 5005 | Shared `postgres` |
+| stay-service | 5006 | Shared `postgres` |
+| inspection-service | 5007 | Shared `postgres` |
+| payment-logs-service | 5008 | Shared `postgres` |
+| listings-search-service | 5009 | Shared `postgres` |
 | payment-gateway-wrapper | 5010 | — |
-| notification-gateway | 5011 | notification_db |
-| Kong (proxy) | 8000 | — |
-| Kong (admin) | 8001 | — |
-| RabbitMQ (AMQP) | 5672 | — |
-| RabbitMQ (management UI) | 15672 | — |
+| notification-gateway | 5011 | Shared `postgres` |
+| Kong (API Gateway) | 8000 | — |
+| RabbitMQ (Events) | 5672 | — |
 
