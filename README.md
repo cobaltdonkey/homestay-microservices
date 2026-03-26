@@ -9,7 +9,7 @@ IS213 Enterprise Solution Development — SMU.
 
 - Docker Desktop (running)
 - Python 3.11 with requests library (`pip install requests`)
-- Ports free: `8000`, `3306`, `5672`, `15672`
+- Ports free: `8000`, `5672`, `15672`
 
 ---
 
@@ -164,4 +164,4 @@ See `/docs/event-schemas.md` for all AMQP event payloads.
 | Kong (admin) | 8001 | — |
 | RabbitMQ (AMQP) | 5672 | — |
 | RabbitMQ (management UI) | 15672 | — |
-| MySQL | 3306 | — |
+

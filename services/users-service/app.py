@@ -9,12 +9,15 @@ load_dotenv()
 def create_app():
     app = Flask(__name__)
 
-    # Use USER_DB_URL (from your .env)
-    database_url = os.environ.get('USER_DB_URL')
+    database_url = os.environ.get("DATABASE_URL")
+
+    if not database_url:
+        raise ValueError("DATABASE_URL is not set")
 
     # Add SSL for Supabase
-    if database_url and "sslmode" not in database_url:
-        database_url += "?sslmode=require"
+    if "sslmode" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
 
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

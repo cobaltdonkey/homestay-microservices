@@ -3,8 +3,7 @@ from datetime import datetime
 import uuid
 
 class UserProfile(db.Model):
-    tablename = "user_profile"
-    table_args = {"schema": "user_db"}
+    __tablename__ = "user_profile"
 
     user_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(100), nullable=False)
@@ -27,8 +26,7 @@ class UserProfile(db.Model):
 
 
 class UserSession(db.Model):
-    tablename = "user_session"
-    table_args = {"schema": "user_db"}
+    __tablename__ = "user_session"
 
     session_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = db.Column(db.String(36), nullable=False)
