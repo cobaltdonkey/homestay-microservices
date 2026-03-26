@@ -3,12 +3,21 @@ import time
 import requests
 from sqlalchemy import create_engine, text
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Ensure sslmode is in the URL (psycopg2 needs it in the connection string, not connect_args)
+if DATABASE_URL and "sslmode" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
 DEPOSIT_RESOLUTION_URL = os.environ.get("DEPOSIT_RESOLUTION_URL", "http://deposit-resolution:5002")
 INSPECTION_SERVICE_URL = os.environ.get("INSPECTION_SERVICE_URL", "http://inspection-service:5007")
 
 
 def wait_for_db():
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL is not set")
+    print(f"[DEP-EXPIRER] Connecting to DB (host: {DATABASE_URL.split('@')[-1].split('/')[0]})", flush=True)
     engine = create_engine(DATABASE_URL)
     for attempt in range(1, 21):
         try:
@@ -27,25 +36,17 @@ def run_cycle(engine):
         result = conn.execute(text(
             "SELECT stay_id FROM stay "
             "WHERE deposit_status = 'HELD' "
-            "AND checkout_time + INTERVAL 48 HOUR < UTC_TIMESTAMP() "
+            "AND checkout_time + interval '48 hours' < CURRENT_TIMESTAMP "
             "LIMIT 50"
         ))
-        rows = result.fetchall()
-        for row in rows:
+        for row in result.fetchall():
             sid = row[0]
             try:
-                # Check if inspection report already exists
-                r = requests.get(
-                    f"{INSPECTION_SERVICE_URL}/inspections/by-stay/{sid}",
-                    timeout=10)
+                r = requests.get(f"{INSPECTION_SERVICE_URL}/inspections/by-stay/{sid}", timeout=10)
                 if r.status_code == 200:
                     print(f"[DEP-EXPIRER] Inspection exists for {sid}, skipping.", flush=True)
                     continue
-
-                # No report filed — trigger auto-release
-                r = requests.post(
-                    f"{DEPOSIT_RESOLUTION_URL}/deposit-resolutions/{sid}/auto-release",
-                    timeout=10)
+                r = requests.post(f"{DEPOSIT_RESOLUTION_URL}/deposit-resolutions/{sid}/auto-release", timeout=10)
                 print(f"[DEP-EXPIRER] Auto-release {sid}: {r.status_code}", flush=True)
             except Exception as e:
                 print(f"[DEP-EXPIRER] Error for {sid}: {e}", flush=True)
