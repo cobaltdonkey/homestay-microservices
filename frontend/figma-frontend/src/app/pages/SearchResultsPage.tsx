@@ -2,10 +2,9 @@ import { useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { SearchBar } from '../components/SearchBar';
 import { ListingCard, Listing } from '../components/ListingCard';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthModal } from '../components/AuthModal';
-import { listingsData } from '../data/listings';
-import { isListingAvailable } from '../utils/availability';
+import { supabase } from '../../utils/supabase';
 
 export function SearchResultsPage() {
   const location = useLocation();
@@ -26,22 +25,52 @@ export function SearchResultsPage() {
     setShowAuthModal(true);
   };
 
+  const [availableListings, setAvailableListings] = useState<Listing[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   // Convert ISO string dates back to Date objects
   const checkInDate = checkIn ? new Date(checkIn) : null;
   const checkOutDate = checkOut ? new Date(checkOut) : null;
 
-  // Filter listings based on availability
-  const availableListings: Listing[] = Object.values(listingsData)
-    .filter((listing) => isListingAvailable(listing, checkInDate, checkOutDate))
-    .map((listing) => ({
-      id: listing.id,
-      imageUrl: listing.imageUrl,
-      propertyType: listing.propertyType,
-      location: listing.location,
-      price: listing.price,
-      rating: listing.rating,
-      bookingType: listing.bookingType,
-    }));
+  useEffect(() => {
+    const fetchSearchResults = async () => {
+      try {
+        setIsLoading(true);
+        
+        let query = supabase
+          .schema('listings_db')
+          .from('property_details')
+          .select('*')
+          .eq('status', 'ACTIVE');
+          
+        if (region) {
+          query = query.eq('region', region);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data) {
+          const mapped: Listing[] = data.map((r: any) => ({
+            id: r.listing_id,
+            propertyType: r.title,
+            location: r.location,
+            price: Number(r.price_per_night),
+            rating: 4.9,
+            bookingType: r.booking_mode === 'INSTANT' ? 'instant' : 'request',
+            imageUrl: r.image_url || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800',
+          }));
+          setAvailableListings(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch search results', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchSearchResults();
+  }, [region, checkIn, checkOut]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -67,11 +96,17 @@ export function SearchResultsPage() {
         </h1>
 
         {/* Listing Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {availableListings.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="py-12 text-[#717171] font-semibold text-center">Searching...</div>
+        ) : availableListings.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {availableListings.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        ) : (
+          <div className="py-12 text-[#717171] font-semibold text-center mt-12">No properties found matching your search. Try another region!</div>
+        )}
       </div>
 
       {/* Auth Modal */}

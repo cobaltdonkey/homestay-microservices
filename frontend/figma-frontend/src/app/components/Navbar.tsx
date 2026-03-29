@@ -31,16 +31,9 @@ export function Navbar({ onOpenAuth, onOpenAuthForHost }: NavbarProps) {
   }, []);
 
   const handleHostToggle = () => {
-    if (isHostPage) {
-      navigate('/');
-    } else {
-      // Check if logged in before allowing host access
-      if (isLoggedIn) {
-        navigate('/host/dashboard');
-      } else {
-        // Trigger auth modal with host notice
-        onOpenAuthForHost?.();
-      }
+    if (!isLoggedIn) {
+      // Trigger auth modal with host notice
+      onOpenAuthForHost?.();
     }
   };
 
@@ -68,12 +61,14 @@ export function Navbar({ onOpenAuth, onOpenAuthForHost }: NavbarProps) {
 
           {/* Right Menu */}
           <div className="flex items-center gap-4">
-            <button 
-              onClick={handleHostToggle}
-              className="hidden md:block text-sm font-semibold text-[#222222] hover:bg-[#FFF5F7] px-4 py-2 rounded-full transition-colors"
-            >
-              {isHostPage ? 'Switch to Guest' : 'Become a host'}
-            </button>
+            {!isLoggedIn && (
+              <button 
+                onClick={handleHostToggle}
+                className="hidden md:block text-sm font-semibold text-[#222222] hover:bg-[#FFF5F7] px-4 py-2 rounded-full transition-colors"
+              >
+                Become a host
+              </button>
+            )}
             
             <div className="relative">
               <button 

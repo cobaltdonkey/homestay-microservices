@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router';
 
 interface AuthModalProps {
   initialTab?: 'login' | 'signup';
@@ -12,9 +13,11 @@ interface AuthModalProps {
 
 export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSuccess, showHostNotice = false }: AuthModalProps) {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>(initialTab);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isHost, setIsHost] = useState(showHostNotice);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -27,24 +30,29 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    let result;
     if (activeTab === 'login') {
-      await login(formData.email, formData.password);
+      result = await login(formData.email, formData.password);
     } else {
-      await login(
+      result = await login(
         formData.email,
         formData.password,
         formData.firstName,
         formData.lastName,
         formData.phone ? `+65${formData.phone}` : undefined,
-        'guest'
+        isHost ? 'host' : 'guest'
       );
     }
     
-    // After awaiting, if login succeeded the context will have set the user.
-    // We close unconditionally (errors surface via alert inside login()).
-    if (onSuccess) onSuccess();
-    if (onAuthSuccess) onAuthSuccess();
-    onClose();
+    if (result?.success) {
+      if (onSuccess) onSuccess();
+      if (onAuthSuccess) onAuthSuccess();
+      onClose();
+      
+      if (result.role === 'host') {
+        navigate('/host/dashboard');
+      }
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -294,6 +302,20 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+              </div>
+
+              {/* Host Toggle */}
+              <div className="mb-6 flex items-center">
+                <input
+                  type="checkbox"
+                  id="isHost"
+                  checked={isHost}
+                  onChange={(e) => setIsHost(e.target.checked)}
+                  className="w-5 h-5 text-[#FF385C] border-2 border-[#EBEBEB] rounded focus:ring-[#FF385C] focus:ring-2 cursor-pointer"
+                />
+                <label htmlFor="isHost" className="ml-3 text-sm font-medium text-[#222222] cursor-pointer">
+                  I want to list and host properties on SecondHome
+                </label>
               </div>
 
               {/* Submit Button */}
