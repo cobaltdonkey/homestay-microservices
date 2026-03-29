@@ -163,7 +163,36 @@ export function ListingDetailPage() {
   const deposit = 200;
   const total = nightlyRate + cleaningFee + deposit;
 
-  const handleInstantBookClick = () => {
+  const checkAvailabilityBeforeBooking = async () => {
+    if (!checkIn || !checkOut) {
+      alert('Please select check-in and check-out dates first');
+      return false;
+    }
+
+    try {
+      const checkInStr = checkIn.toISOString().split('T')[0];
+      const checkOutStr = checkOut.toISOString().split('T')[0];
+      const res = await fetch(`/availability?listingId=${id}&checkInDate=${checkInStr}&checkOutDate=${checkOutStr}`);
+      const json = await res.json();
+      
+      if (json.code === 200 && json.data.available) {
+        return true;
+      } else {
+        alert('Sorry, this property is no longer available for these dates. Please try another date range.');
+        return false;
+      }
+    } catch (err) {
+      console.error('Availability check failed:', err);
+      // Fail open for UX if service is down? Let's be safe and fail closed
+      alert('Could not verify availability. Please try again later.');
+      return false;
+    }
+  };
+
+  const handleInstantBookClick = async () => {
+    const isAvailable = await checkAvailabilityBeforeBooking();
+    if (!isAvailable) return;
+
     if (isLoggedIn) {
       navigate(`/booking/confirm-and-pay/${id}`, {
         state: { checkIn, checkOut, guests },
@@ -174,7 +203,10 @@ export function ListingDetailPage() {
     }
   };
 
-  const handleRequestBookClick = () => {
+  const handleRequestBookClick = async () => {
+    const isAvailable = await checkAvailabilityBeforeBooking();
+    if (!isAvailable) return;
+
     if (isLoggedIn) {
       navigate(`/booking/authorise-and-request/${id}`, {
         state: { checkIn, checkOut, guests },
