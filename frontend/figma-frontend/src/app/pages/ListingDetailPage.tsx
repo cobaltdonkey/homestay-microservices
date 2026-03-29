@@ -3,8 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import { BookingPanelCalendar } from '../components/BookingPanelCalendar';
-import { getListingById } from '../data/listings';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../../utils/supabase';
 import {
   Star,
   Wifi,
@@ -23,7 +23,55 @@ export function ListingDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isLoggedIn } = useAuth();
+  const [listing, setListing] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [checkIn, setCheckIn] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const fetchListing = async () => {
+      if (!id) return;
+      try {
+        const { data, error } = await supabase
+          .schema('listings_db')
+          .from('property_details')
+          .select('*')
+          .eq('listing_id', id)
+          .single();
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+
+        if (data) {
+          setListing({
+            id: data.listing_id,
+            propertyType: data.title,
+            location: data.location,
+            price: Number(data.price_per_night),
+            rating: 4.9,
+            reviewCount: 124,
+            bookingType: data.booking_mode === 'INSTANT' ? 'instant' : 'request',
+            imageUrl: data.image_url || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800',
+            host: {
+              name: 'Sarah',
+              avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+              isSuperhost: true,
+              memberSince: '2021',
+            },
+            description: 'Beautiful property located in the heart of ' + data.location + '.',
+            amenities: ['wifi', 'kitchen', 'pool', 'parking', 'ac'],
+            blockedDates: []
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch listing detail', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchListing();
+  }, [id]);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -63,13 +111,6 @@ export function ListingDetailPage() {
     setPendingBookingAction(null);
   };
 
-  // Get listing data
-  const listing = getListingById(id || '');
-
-  if (!listing) {
-    return <div>Listing not found</div>;
-  }
-
   // Pre-fill from search if available
   useEffect(() => {
     if (location.state) {
@@ -98,8 +139,16 @@ export function ListingDetailPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!listing) {
+    return <div className="min-h-screen flex items-center justify-center text-xl text-[#717171]">Listing not found</div>;
+  }
+
   // Convert blocked dates to Date objects
-  const blockedRanges = listing.blockedDates.map((range) => ({
+  const blockedRanges = listing.blockedDates.map((range: any) => ({
     start: new Date(range.start),
     end: new Date(range.end),
   }));
@@ -167,32 +216,13 @@ export function ListingDetailPage() {
           <span className="font-semibold">Back</span>
         </button>
 
-        <div className="grid grid-cols-4 gap-2 h-[500px] rounded-xl overflow-hidden relative">
+        <div className="h-[500px] rounded-xl overflow-hidden relative">
           {/* Large Hero Image */}
-          <div className="col-span-2 row-span-2">
-            <img
-              src={listing.images[0]}
-              alt="Main property view"
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Thumbnail Grid */}
-          {listing.images.slice(1).map((img, idx) => (
-            <div key={idx} className="col-span-1 row-span-1">
-              <img
-                src={img}
-                alt={`Property view ${idx + 2}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ))}
-
-          {/* Show All Photos Button */}
-          <button className="absolute bottom-6 right-6 bg-white border border-[#222222] px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#F7F7F7] transition-colors font-semibold text-sm">
-            <Grid3x3 className="w-4 h-4" />
-            Show all photos
-          </button>
+          <img
+            src={listing.imageUrl}
+            alt="Main property view"
+            className="w-full h-full object-cover"
+          />
         </div>
 
         {/* Two Column Layout */}

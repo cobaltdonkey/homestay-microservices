@@ -24,9 +24,7 @@ export function NavbarDropdown({ isLoggedIn, onOpenAuth, onOpenAuthForHost, onCl
         navigate('/my-trips');
         break;
       case 'becomeHost':
-        if (isLoggedIn) {
-          navigate('/host/dashboard', { state: { fromDropdown: true } });
-        } else {
+        if (!isLoggedIn) {
           onOpenAuthForHost?.();
         }
         break;
@@ -51,13 +49,6 @@ export function NavbarDropdown({ isLoggedIn, onOpenAuth, onOpenAuthForHost, onCl
           className="w-full text-left px-4 py-3 hover:bg-[#FFF5F7] transition-colors text-[#222222] font-medium"
         >
           My Trips
-        </button>
-        <div className="border-t border-[#EBEBEB]" />
-        <button
-          onClick={() => handleItemClick('becomeHost')}
-          className="w-full text-left px-4 py-3 hover:bg-[#FFF5F7] transition-colors text-[#222222] font-medium"
-        >
-          Become a host
         </button>
         <div className="border-t border-[#EBEBEB]" />
         <button

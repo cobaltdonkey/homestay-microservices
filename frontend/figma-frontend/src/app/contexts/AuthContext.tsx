@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../../utils/supabase';
 
 interface User {
   userId: string;
@@ -12,7 +13,7 @@ interface User {
 interface AuthContextType {
   isLoggedIn: boolean;
   user: User | null;
-  login: (email: string, password: string, firstName?: string, lastName?: string, phoneNumber?: string, role?: string) => Promise<void>;
+  login: (email: string, password: string, firstName?: string, lastName?: string, phoneNumber?: string, role?: string) => Promise<{ success: boolean; role?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -45,64 +46,113 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role?: string
   ) => {
     try {
+      let userDataToSet = null;
+
       // Registration flow (sign up)
       if (firstName && lastName) {
-        const regRes = await fetch('/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const newUserId = crypto.randomUUID();
+        const { error: regError } = await supabase
+          .schema('user_db')
+          .from('user_profile')
+          .insert({
+            user_id: newUserId,
             name: `${firstName} ${lastName}`,
             email,
             password,
-            phoneNumber: phoneNumber ?? '+6500000000',
+            phone_number: phoneNumber ?? '+6500000000',
             role: role ?? 'guest',
-          }),
-        });
-        if (!regRes.ok && regRes.status !== 409) {
-          const err = await regRes.json();
-          alert(err.message ?? 'Registration failed');
-          return;
+          });
+
+        if (regError) {
+          console.error(regError);
+          if (regError.message.includes('duplicate key') || regError.message.includes('unique constraint')) {
+            alert('The email is used please use different email');
+          } else {
+            alert('Registration failed: ' + regError.message);
+          }
+          return { success: false };
         }
+
+        userDataToSet = {
+          userId: newUserId,
+          name: `${firstName} ${lastName}`,
+          email,
+          role: role ?? 'guest',
+          initials: firstName[0].toUpperCase() + lastName[0].toUpperCase(),
+          sessionId: crypto.randomUUID(),
+        };
+
+      } else {
+        // Login flow
+        const { data, error } = await supabase
+          .schema('user_db')
+          .from('user_profile')
+          .select('*')
+          .eq('email', email)
+          .eq('password', password)
+          .single();
+
+        if (error || !data) {
+          alert('Login failed. Check your email and password.');
+          return { success: false };
+        }
+
+        const nameParts = data.name.split(' ');
+        const initials = nameParts.length > 1
+          ? nameParts[0][0].toUpperCase() + nameParts[1][0].toUpperCase()
+          : data.name[0].toUpperCase();
+
+        userDataToSet = {
+          userId: data.user_id,
+          name: data.name,
+          email: data.email,
+          role: data.role,
+          initials,
+          sessionId: crypto.randomUUID(),
+        };
       }
 
-      // Login flow
-      const res = await fetch('/users/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      if (userDataToSet) {
+        // Record the session in the database
+        const { error: sessionError } = await supabase
+          .schema('user_db')
+          .from('user_session')
+          .insert({
+            session_id: userDataToSet.sessionId,
+            user_id: userDataToSet.userId,
+            is_active: true,
+          });
 
-      const json = await res.json();
+        if (sessionError) {
+          console.error('Failed to log session in database:', sessionError);
+        }
 
-      if (!res.ok || json.code !== 200) {
-        alert(json.message ?? 'Login failed. Check your email and password.');
-        return;
+        setUser(userDataToSet);
+        setIsLoggedIn(true);
+        localStorage.setItem('secondhome_user', JSON.stringify(userDataToSet));
+        return { success: true, role: userDataToSet.role };
       }
-
-      const { userId, name, role: userRole, sessionId } = json.data;
-      const initials = name
-        ? name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
-        : 'U';
-
-      const userData: User = { userId, name, email, role: userRole, initials, sessionId };
-      setUser(userData);
-      setIsLoggedIn(true);
-      localStorage.setItem('secondhome_user', JSON.stringify(userData));
+      return { success: false };
 
     } catch (err) {
       console.error('Auth error:', err);
-      alert('Authentication error. Is the backend running?');
+      alert('Authentication error via Supabase.');
+      return { success: false };
     }
   };
 
   const logout = async () => {
     try {
       if (user?.sessionId) {
-        await fetch('/users/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: user.sessionId }),
-        });
+        // Mark session as inactive in the database
+        await supabase
+          .schema('user_db')
+          .from('user_session')
+          .update({ 
+            is_active: false,
+            logged_out_at: new Date().toISOString()
+          })
+          .eq('session_id', user.sessionId);
       }
     } catch (err) {
       console.error('Logout error:', err);

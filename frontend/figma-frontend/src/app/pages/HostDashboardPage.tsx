@@ -165,9 +165,6 @@ export function HostDashboardPage() {
         {/* Page Heading with Toggle */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-semibold text-[#222222]">Host Dashboard</h1>
-          <button className="flex items-center gap-2 px-4 py-2 border border-[#EBEBEB] rounded-full hover:shadow-md transition-shadow">
-            <span className="text-sm font-semibold text-[#222222]">Switch to Guest</span>
-          </button>
         </div>
 
         {/* Stats Row */}

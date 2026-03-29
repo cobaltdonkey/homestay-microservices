@@ -5,6 +5,7 @@ import { AuthModal } from '../components/AuthModal';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
 import { listingsData } from '../data/listings';
+import { supabase } from '../../utils/supabase';
 
 const popularListings: Listing[] = [
   {
@@ -214,25 +215,35 @@ export function LandingPage() {
   const [authTab, setAuthTab] = useState<'login' | 'signup'>('login');
   const [showHostNotice, setShowHostNotice] = useState(false);
   const [resetSearch, setResetSearch] = useState(false);
-  const [liveListings, setLiveListings] = useState<Listing[]>(popularListings);
+  const [liveListings, setLiveListings] = useState<Listing[]>([]);
+  const [liveWeekendListings, setLiveWeekendListings] = useState<Listing[]>([]);
 
   useEffect(() => {
     const fetchListings = async () => {
       try {
-        const res = await fetch('/search/listings?location=Singapore');
-        if (!res.ok) return;
-        const json = await res.json();
-        if (json.code === 200 && json.data?.results?.length > 0) {
-          const mapped: Listing[] = json.data.results.map((r: any) => ({
-            id: r.listingId,
+        const { data, error } = await supabase
+          .schema('listings_db')
+          .from('property_details')
+          .select('*')
+          .eq('status', 'ACTIVE');
+
+        if (error) {
+          console.error('Error fetching from Supabase:', error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          const mapped: Listing[] = data.map((r: any) => ({
+            id: r.listing_id,
             propertyType: r.title,
             location: r.location,
-            price: Number(r.pricePerNight),
-            rating: 4.9,
-            bookingType: r.bookingMode === 'INSTANT' ? 'instant' : 'request',
-            imageUrl: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
+            price: Number(r.price_per_night),
+            rating: 4.9, // Default fallback
+            bookingType: r.booking_mode === 'INSTANT' ? 'instant' : 'request',
+            imageUrl: r.image_url || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
           }));
           setLiveListings(mapped);
+          setLiveWeekendListings([...mapped].reverse());
         }
       } catch (err) {
         console.error('Failed to fetch listings:', err);
@@ -287,7 +298,7 @@ export function LandingPage() {
       <div className="bg-[#FFF5F7]">
         <ListingSection 
           title="Available this weekend in Singapore" 
-          listings={weekendListings}
+          listings={liveWeekendListings}
         />
       </div>
 
