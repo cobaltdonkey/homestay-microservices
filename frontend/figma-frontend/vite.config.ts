@@ -23,18 +23,14 @@ export default defineConfig({
   server: {
     proxy: {
       // Forward all API calls to Kong gateway (port 8000)
-      '/users': 'http://localhost:8000',
-      '/listings': 'http://localhost:8000',
-      '/search': 'http://localhost:8000',
-      '/availability': 'http://localhost:8000',
-      '/bookings': 'http://localhost:8000',
-      '/gateway': 'http://localhost:8000',
-      '/stays': 'http://localhost:8000',
-      '/notifications': 'http://localhost:8000',
-      '/inspections': 'http://localhost:8000',
-      '/payment-logs': 'http://localhost:8000',
-      '/deposit-resolutions': 'http://localhost:8000',
-      '/notification-gateway': 'http://localhost:8000',
+      '/users': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/listings': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/search': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/availability': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/bookings': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/gateway': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/stays': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/notifications': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
 })

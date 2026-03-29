@@ -73,6 +73,7 @@ export function SearchBar({ variant = 'hero', onReset, initialRegion = '', initi
     setCheckOut(newCheckOut);
     if (newCheckIn && newCheckOut) {
       setErrors(prev => ({ ...prev, dates: false }));
+      setShowDatePicker(false); // Auto-close when both dates are selected
     }
   };
 
@@ -122,7 +123,10 @@ export function SearchBar({ variant = 'hero', onReset, initialRegion = '', initi
 
   if (variant === 'hero') {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div 
+        className="max-w-4xl mx-auto"
+        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+      >
         <div className="flex items-center border-2 border-[#EBEBEB] rounded-full shadow-lg bg-white">
           {/* Where */}
           <div className="flex-1 relative" ref={regionRef}>

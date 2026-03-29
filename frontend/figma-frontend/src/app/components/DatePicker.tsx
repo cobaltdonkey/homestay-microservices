@@ -62,13 +62,15 @@ export function DatePicker({ onClose, onDatesSelected, initialCheckIn, initialCh
       setCheckOut(null);
     } else {
       // Second click
+      let finalCheckIn = checkIn;
+      let finalCheckOut = date;
       if (date < checkIn) {
-        // If clicked date is before check-in, set it as new check-in
-        setCheckOut(checkIn);
-        setCheckIn(date);
-      } else {
-        setCheckOut(date);
+        finalCheckOut = checkIn;
+        finalCheckIn = date;
       }
+      setCheckIn(finalCheckIn);
+      setCheckOut(finalCheckOut);
+      onDatesSelected(finalCheckIn, finalCheckOut);
     }
   };
 
