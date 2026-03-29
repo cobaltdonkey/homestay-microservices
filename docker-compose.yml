@@ -1,4 +1,3 @@
-version: "3.8"
 
 services:
   rabbitmq:
@@ -32,6 +31,7 @@ services:
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_DNS_RESOLVER: 127.0.0.11
     volumes:
       - ./infra/kong.yml:/kong/kong.yml
     ports:
@@ -105,6 +105,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./services/shared:/app/shared
+      - ./infra:/app/infra
     networks:
       - airbnb-net
     expose:
@@ -126,6 +127,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./services/shared:/app/shared
+      - ./infra:/app/infra
     networks:
       - airbnb-net
     expose:
