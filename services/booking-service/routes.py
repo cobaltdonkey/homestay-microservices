@@ -26,6 +26,12 @@ def initiate_booking():
     checkOutDate = body.get('checkOutDate')
     paymentMethodId = body.get('paymentMethodId')
     bookingMode = body.get('bookingMode')
+    
+    # Optional fields for My Trips
+    listingTitle = body.get('listingTitle')
+    listingImage = body.get('listingImage')
+    totalAmount = body.get('totalAmount')
+    guests = body.get('guests')
 
     # Step 1 — Validate listing
     status_code, data = call_service("get",
@@ -75,7 +81,11 @@ def initiate_booking():
         payment_due_at=datetime.utcnow() + timedelta(minutes=15),
         hold_id=holdId,
         booking_mode=bookingMode,
-        status=BOOKING_STATUS_AWAITING_PAYMENT
+        status=BOOKING_STATUS_AWAITING_PAYMENT,
+        listing_title=listingTitle,
+        listing_image=listingImage,
+        total_amount=totalAmount if totalAmount is not None else amount,
+        guests=guests
     )
     db.session.add(booking)
     db.session.commit()
@@ -178,6 +188,55 @@ def get_booking(bookingId):
     if not booking:
         return jsonify({"code": 404, "data": None, "message": "Booking not found"}), 404
     return jsonify({"code": 200, "data": booking.to_dict(), "message": "success"}), 200
+
+
+@bp.route('', methods=['GET'])
+@bp.route('/bookings', methods=['GET'])
+def list_bookings():
+    guestId = request.args.get('guestId')
+    hostId = request.args.get('hostId')
+    
+    query = Booking.query
+    if guestId:
+        query = query.filter_by(guest_id=guestId)
+    if hostId:
+        query = query.filter_by(host_id=hostId)
+        
+    bookings = query.order_by(Booking.created_at.desc()).all()
+    return jsonify({
+        "code": 200,
+        "data": [b.to_dict() for b in bookings],
+        "message": "success"
+    }), 200
+
+
+@bp.route('/listings/<listingId>/booked-dates', methods=['GET'])
+@bp.route('/bookings/listings/<listingId>/booked-dates', methods=['GET'])
+def get_booked_dates(listingId):
+    """Return all booked date ranges for a listing to prevent double-booking."""
+    active_statuses = [
+        BOOKING_STATUS_AWAITING_PAYMENT,
+        BOOKING_STATUS_PAID,
+        BOOKING_STATUS_CONFIRMED,
+        BOOKING_STATUS_PENDING_HOST,
+    ]
+    bookings = Booking.query.filter(
+        Booking.listing_id == listingId,
+        Booking.status.in_(active_statuses)
+    ).all()
+    
+    booked_ranges = [
+        {
+            "checkInDate": b.check_in_date.isoformat(),
+            "checkOutDate": b.check_out_date.isoformat(),
+        }
+        for b in bookings
+    ]
+    return jsonify({
+        "code": 200,
+        "data": booked_ranges,
+        "message": "success"
+    }), 200
 
 
 @bp.route('/<bookingId>/approve', methods=['POST'])

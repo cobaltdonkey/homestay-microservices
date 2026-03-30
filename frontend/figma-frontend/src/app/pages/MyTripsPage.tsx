@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import { BookingDetailModal } from '../components/BookingDetailModal';
-import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge, BookingStatus } from '../components/StatusBadge';
 import { ArrowLeft, MapPin, Calendar, Users, Clock } from 'lucide-react';
 
 interface Booking {
@@ -12,7 +12,7 @@ interface Booking {
   listingTitle: string;
   listingImage: string;
   dates: string;
-  status: 'awaiting_payment' | 'confirmed' | 'paid' | 'pending_host' | 'rejected' | 'expired' | 'completed' | 'cancelled';
+  status: BookingStatus;
   guests: number;
   total: number;
   timeRemaining?: { hours: number; minutes: number; seconds: number };
@@ -49,10 +49,10 @@ export function MyTripsPage() {
             id: b.bookingId,
             bookingId: b.bookingId,
             listingTitle: b.listingTitle ?? b.listingId,
-            listingImage: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=300&q=80',
+            listingImage: b.listingImage ?? 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=300&q=80',
             dates: `${b.checkInDate} – ${b.checkOutDate}`,
-            status: (b.status ?? 'confirmed').toLowerCase() as Booking['status'],
-            guests: 2,
+            status: ((b.status ?? 'CONFIRMED').toUpperCase()) as BookingStatus,
+            guests: b.guests ?? 1,
             total: Number(b.totalAmount ?? 0),
           }));
           setBookings(mapped);
@@ -72,7 +72,7 @@ export function MyTripsPage() {
     const timer = setInterval(() => {
       setBookings(prev => {
         return prev.map(booking => {
-          if (booking.status === 'pending_host' && booking.timeRemaining) {
+          if (booking.status === 'PENDING_HOST' && booking.timeRemaining) {
             const { hours, minutes, seconds } = booking.timeRemaining;
             
             // Check if expired
@@ -80,7 +80,7 @@ export function MyTripsPage() {
               alert(`Booking ${booking.bookingId} has expired. The host did not respond within 24 hours.`);
               return {
                 ...booking,
-                status: 'expired' as const,
+                status: 'EXPIRED' as BookingStatus,
                 timeRemaining: undefined
               };
             }
@@ -115,11 +115,11 @@ export function MyTripsPage() {
   const filterBookings = (bookings: Booking[], tab: FilterTab): Booking[] => {
     switch (tab) {
       case 'upcoming':
-        return bookings.filter(b => ['awaiting_payment', 'confirmed', 'paid', 'pending_host'].includes(b.status));
+        return bookings.filter(b => ['AWAITING_PAYMENT', 'CONFIRMED', 'PAID', 'PENDING_HOST'].includes(b.status));
       case 'completed':
-        return bookings.filter(b => b.status === 'completed');
+        return bookings.filter(b => b.status === 'COMPLETED');
       case 'cancelled':
-        return bookings.filter(b => ['cancelled', 'rejected', 'expired'].includes(b.status));
+        return bookings.filter(b => ['REJECTED', 'EXPIRED', 'FAILED_PAYMENT'].includes(b.status));
       default:
         return bookings;
     }
@@ -208,7 +208,7 @@ export function MyTripsPage() {
                 </div>
                 
                 {/* Countdown Timer for Pending Bookings */}
-                {booking.status === 'pending_host' && booking.timeRemaining && (
+                {booking.status === 'PENDING_HOST' && booking.timeRemaining && (
                   <div className="bg-[#FFF9E6] border border-[#FFE066] rounded-lg p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-[#FF385C]" />

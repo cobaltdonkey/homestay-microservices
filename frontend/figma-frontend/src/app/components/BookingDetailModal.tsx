@@ -1,5 +1,5 @@
 import { X, Star, Clock } from 'lucide-react';
-import { StatusBadge } from './StatusBadge';
+import { StatusBadge, BookingStatus } from './StatusBadge';
 
 interface Booking {
   id: string;
@@ -7,7 +7,7 @@ interface Booking {
   listingTitle: string;
   listingImage: string;
   dates: string;
-  status: 'awaiting_payment' | 'confirmed' | 'paid' | 'pending_host' | 'rejected' | 'expired' | 'completed' | 'cancelled';
+  status: BookingStatus;
   guests: number;
   total: number;
   timeRemaining?: { hours: number; minutes: number; seconds: number };
@@ -88,7 +88,7 @@ export function BookingDetailModal({ booking, onClose }: BookingDetailModalProps
           </div>
 
           {/* Countdown Timer for Pending Host */}
-          {booking.status === 'pending_host' && booking.timeRemaining && (
+          {booking.status === 'PENDING_HOST' && booking.timeRemaining && (
             <div className="bg-[#FFF9E6] border border-[#FFE066] rounded-xl p-4 mb-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
