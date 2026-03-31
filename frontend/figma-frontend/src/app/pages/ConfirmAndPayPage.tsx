@@ -24,9 +24,18 @@ function ConfirmAndPayPageInner() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
+  const routeState = location.state as any || {};
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [timeLeft, setTimeLeft] = useState(30); // 30-second soft hold
-  const [holdId, setHoldId] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (routeState.expireAt && routeState.holdId) {
+      const expiry = new Date(routeState.expireAt).getTime();
+      const now = new Date().getTime();
+      const diff = Math.floor((expiry - now) / 1000);
+      return diff;
+    }
+    return 0;
+  });
+  const holdId = routeState.holdId || null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const stripe = useStripe();
   const elements = useElements();
@@ -35,8 +44,6 @@ function ConfirmAndPayPageInner() {
   // Card is valid if stripe is loaded
   const isCardValid = !!stripe;
 
-  // Read booking context from router state
-  const routeState = location.state as any || {};
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
@@ -74,35 +81,6 @@ function ConfirmAndPayPageInner() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
-  // POST /bookings/request-hold on mount
-  useEffect(() => {
-    if (!id || !checkIn || !checkOut || holdId) return;
-    const createHold = async () => {
-      try {
-        const res = await fetch('/bookings/request-hold', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            listingId: id,
-            guestId,
-            checkInDate: checkIn,
-            checkOutDate: checkOut
-          }),
-        });
-        const json = await res.json();
-        if (json.code === 201 || json.code === 200) {
-          setHoldId(json.data.holdId);
-          if (json.data.expireAt) {
-            setTimeLeft(30);
-          }
-        }
-      } catch (err) {
-        console.error('Hold failed:', err);
-      }
-    };
-    createHold();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Countdown timer
   useEffect(() => {
