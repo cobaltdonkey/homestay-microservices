@@ -42,7 +42,21 @@ npm install
 npm run dev
 ```
 
+<<<<<<< HEAD
+Then open the Vite app URL shown in your terminal (defaults to `http://localhost:5173`). Use `/` for the guest experience, `/my-trips` for booking lookup/history, and `/host/dashboard` for the host workspace.
+
+---
+
+## Supabase Migration (New)
+
+The project has been migrated to Supabase. Please follow these steps:
+
+1. Create a project at [Supabase](https://supabase.com).
+2. Run the SQL script found in `infra/init-db/supabase_init.sql` (includes table creation and permissions).
+3. Update `frontend/figma-frontend/.env` with your Supabase URL and Anon Key.
+=======
 Then open the Vite app URL shown in your terminal (defaults to `http://localhost:5173`). The app provides a integrated experience for both guests (landing page, search, bookings) and hosts (dashboard hub).
+>>>>>>> origin/fix/supabase-link
 
 ---
 
@@ -72,7 +86,7 @@ The platform is pre-seeded with the following test account:
 
 1. Guest: same flow but choose the Marina Bay request-booking listing → confirmation shows `PENDING_HOST`
 2. Copy the Booking ID
-3. Open the React app at `/host`, paste Booking ID, click **Load booking**
+3. Open the React app at `/host/dashboard`, paste Booking ID, click **Load booking**
 4. Click **✓ Approve** → status changes to `CONFIRMED`
 
 ### Scenario 2.2 — Host Reject
@@ -84,7 +98,7 @@ The platform is pre-seeded with the following test account:
 ### Scenario 3.1.1 — Post-Stay Inspection (Good)
 
 1. Find a `stayId` (from booking logs or `stay_db`)
-2. Open the React app at `/host` and use the **Submit inspection** section
+2. Open the React app at `/host/dashboard` and use the **Submit inspection** section
 3. Enter stayId, select **GOOD**, add notes
 4. Click **Submit Inspection**
 5. Result shows `action=RELEASE`
@@ -127,7 +141,7 @@ docker compose up -d
 ## Troubleshooting
 
 | Symptom | Fix |
-|---------|-----|
+|-------|----------|
 | Container exits immediately | `docker compose logs <service-name>` |
 | Port 8000 refused | Kong takes ~30s after MySQL/RabbitMQ are ready — wait and retry |
 | Table doesn't exist | `docker compose down -v && docker compose up --build` |
@@ -164,7 +178,15 @@ See `/docs/event-schemas.md` for all AMQP event payloads.
 | payment-logs-service | 5008 | Shared `postgres` |
 | listings-search-service | 5009 | Shared `postgres` |
 | payment-gateway-wrapper | 5010 | — |
+<<<<<<< HEAD
+| notification-gateway | 5011 | notification_db |
+| Kong (proxy) | 8000 | — |
+| Kong (admin) | 8001 | — |
+| RabbitMQ (AMQP) | 5672 | — |
+| RabbitMQ (management UI) | 15672 | — |
+=======
 | notification-gateway | 5011 | Shared `postgres` |
 | Kong (API Gateway) | 8000 | — |
 | RabbitMQ (Events) | 5672 | — |
 
+>>>>>>> origin/fix/supabase-link

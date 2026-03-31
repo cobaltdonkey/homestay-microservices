@@ -2,6 +2,7 @@ import os
 import requests
 from flask import Blueprint, request, jsonify
 from models import ListingIndex
+from sqlalchemy import or_
 from db import db
 
 main = Blueprint('main', __name__)
@@ -70,64 +71,74 @@ def index_listing():
 @main.route('/listings', methods=['GET'])
 @main.route('/search/listings', methods=['GET'])
 def search_listings():
-    location = request.args.get('location')
-    max_price = request.args.get('maxPrice')
-    limit_str = request.args.get('limit', '5')
-    check_in_date = request.args.get('checkInDate')
-    check_out_date = request.args.get('checkOutDate')
-
-    if not location:
-        return jsonify({"code": 400, "data": {}, "message": "location query parameter is required"}), 400
-
     try:
-        limit = int(limit_str)
-    except ValueError:
-        return jsonify({"code": 400, "data": {}, "message": "Invalid limit format"}), 400
+        location = request.args.get('location')
+        max_price = request.args.get('maxPrice')
+        limit_str = request.args.get('limit', '5')
+        check_in_date = request.args.get('checkInDate')
+        check_out_date = request.args.get('checkOutDate')
 
-    query = ListingIndex.query.filter(
-        ListingIndex.location.ilike(f"%{location}%"),
-        ListingIndex.availability_status == 'AVAILABLE'
-    )
+        if not location:
+            return jsonify({"code": 400, "data": {}, "message": "location query parameter is required"}), 400
 
-    if max_price is not None:
         try:
-            max_p = float(max_price)
-            query = query.filter(ListingIndex.price_per_night <= max_p)
+            limit = int(limit_str)
         except ValueError:
-            return jsonify({"code": 400, "data": {}, "message": "Invalid maxPrice format"}), 400
+            return jsonify({"code": 400, "data": {}, "message": "Invalid limit format"}), 400
 
-    # Fetch initial potential matches directly from DB 
-    listings = query.all()
-    
-    # If explicit chronological dates provided, perform remote availability RPC
-    if check_in_date and check_out_date:
-        available_listings = []
-        for l in listings:
+        query = ListingIndex.query.filter(
+            or_(
+                ListingIndex.location.ilike(f"%{location}%"),
+                ListingIndex.region.ilike(f"%{location}%")
+            ),
+            ListingIndex.status == 'ACTIVE'
+        )
+
+        if max_price is not None:
             try:
-                # Use internal Docker routing strictly for performance bridging 
-                avail_url = f"http://availability-service:5005/?listingId={l.listing_id}&checkInDate={check_in_date}&checkOutDate={check_out_date}"
-                resp = requests.get(avail_url, timeout=3)
-                if resp.status_code == 200:
-                    resp_data = resp.json().get('data', {})
-                    if resp_data.get('available') is True:
-                        available_listings.append(l)
-            except Exception:
-                pass # Skip if failure
-        listings = available_listings
-        
-    listings = listings[:limit]
+                max_p = float(max_price)
+                query = query.filter(ListingIndex.price_per_night <= max_p)
+            except ValueError:
+                return jsonify({"code": 400, "data": {}, "message": "Invalid maxPrice format"}), 400
 
-    return jsonify({
-        "code": 200,
-        "data": {
-            "query": {
-                "location": location,
-                "maxPrice": max_price,
-                "limit": limit,
-                "checkInDate": check_in_date,
-                "checkOutDate": check_out_date
+        # Fetch initial potential matches directly from DB 
+        listings = query.all()
+        
+        # If explicit chronological dates provided, perform remote availability RPC
+        if check_in_date and check_out_date:
+            available_listings = []
+            # Clean dates to YYYY-MM-DD format as expected by availability service
+            clean_in = check_in_date.split('T')[0]
+            clean_out = check_out_date.split('T')[0]
+            
+            for l in listings:
+                try:
+                    # Use internal Docker routing strictly for performance bridging 
+                    avail_url = f"http://availability-service:5005/availability?listingId={l.listing_id}&checkInDate={clean_in}&checkOutDate={clean_out}"
+                    resp = requests.get(avail_url, timeout=3)
+                    if resp.status_code == 200:
+                        resp_data = resp.json().get('data', {})
+                        if resp_data.get('available') is True:
+                            available_listings.append(l)
+                except Exception:
+                    pass # Skip if failure
+            listings = available_listings
+            
+        listings = listings[:limit]
+
+        return jsonify({
+            "code": 200,
+            "data": {
+                "query": {
+                    "location": location,
+                    "maxPrice": max_price,
+                    "limit": limit,
+                    "checkInDate": check_in_date,
+                    "checkOutDate": check_out_date
+                },
+                "results": [l.to_dict() for l in listings]
             },
-            "results": [l.to_dict() for l in listings]
-        },
-        "message": "success"
-    }), 200
+            "message": "success"
+        }), 200
+    except Exception as e:
+        return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
