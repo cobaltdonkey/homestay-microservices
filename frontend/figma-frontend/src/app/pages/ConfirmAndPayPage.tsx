@@ -72,7 +72,7 @@ export function ConfirmAndPayPage() {
 
   // POST /availability/hold on mount
   useEffect(() => {
-    if (!id || !checkIn || !checkOut) return;
+    if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
       try {
         const res = await fetch('/availability/hold', {
@@ -83,11 +83,14 @@ export function ConfirmAndPayPage() {
             guestId,
             checkInDate: checkIn,
             checkOutDate: checkOut,
-            ttlSeconds: 15,
+            ttlSeconds: 60,
           }),
         });
         const json = await res.json();
-        if (json.code === 201) setHoldId(json.data?.holdId ?? null);
+        if (json.code === 201) {
+          setHoldId(json.data?.holdId ?? null);
+          setTimeLeft(15);
+        }
       } catch (err) {
         console.error('Hold failed:', err);
       }
@@ -102,17 +105,27 @@ export function ConfirmAndPayPage() {
       setTimeLeft((prev) => {
         if (prev <= 1 && !hasRedirected.current) {
           hasRedirected.current = true;
-          setTimeout(() => {
+          
+          const releaseHold = async () => {
+            if (holdId) {
+              try {
+                await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
+                console.log('[HOLD] Session expired, hold released:', holdId);
+              } catch (e) {
+                console.error('[HOLD] Failed to release hold:', e);
+              }
+            }
             alert('Payment session expired. Please try again.');
             navigate(-1);
-          }, 0);
+          };
+          releaseHold();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [navigate]);
+  }, [navigate, holdId]);
 
   const handleConfirm = async () => {
     if (isSubmitting) return;

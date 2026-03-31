@@ -4,6 +4,7 @@ from db import db
 
 class PropertyDetails(db.Model):
     __tablename__ = 'property_details'
+    __table_args__ = {"schema": "listings_db"}
     
     listing_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     host_id = db.Column(db.String(36), nullable=False)

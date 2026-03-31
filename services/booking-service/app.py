@@ -26,7 +26,10 @@ def create_app():
     db.init_app(app)
 
     from routes import bp
-    app.register_blueprint(bp)
+    # Use url_prefix to cleanly handle all /bookings requests
+    app.register_blueprint(bp, url_prefix='/bookings')
+    # Also register it without a prefix for routes that don't have it (like root /health)
+    app.register_blueprint(bp, name='main_root')
 
     return app
 
