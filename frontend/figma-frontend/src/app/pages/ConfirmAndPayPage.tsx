@@ -12,13 +12,22 @@ export function ConfirmAndPayPage() {
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
   const [cardName, setCardName] = useState('');
-  const [timeLeft, setTimeLeft] = useState(15); // 15-second soft hold
-  const [holdId, setHoldId] = useState<string | null>(null);
+  const routeState = location.state as any || {};
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (routeState.expireAt) {
+      const expiry = new Date(routeState.expireAt).getTime();
+      const now = new Date().getTime();
+      const diff = Math.floor((expiry - now) / 1000);
+      console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
+      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
+    }
+    return 60;
+  });
+  const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const hasRedirected = useRef(false);
 
-  // Read booking context from router state
-  const routeState = location.state as any || {};
+  // Booking context from router state
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
@@ -43,9 +52,9 @@ export function ConfirmAndPayPage() {
   const total = listing.price * listing.nights + listing.cleaningFee + listing.deposit;
   const splitAmount = total / 2;
 
-  // POST /availability/hold on mount
+  // POST /availability/hold on mount IF NO HOLD EXISTS
   useEffect(() => {
-    if (!id || !checkIn || !checkOut) return;
+    if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
       try {
         const res = await fetch('/availability/hold', {
@@ -56,11 +65,14 @@ export function ConfirmAndPayPage() {
             guestId,
             checkInDate: checkIn,
             checkOutDate: checkOut,
-            ttlSeconds: 15,
+            ttlSeconds: 60,
           }),
         });
         const json = await res.json();
-        if (json.code === 201) setHoldId(json.data?.holdId ?? null);
+        if (json.code === 201) {
+          setHoldId(json.data?.holdId ?? null);
+          setTimeLeft(15);
+        }
       } catch (err) {
         console.error('Hold failed:', err);
       }
@@ -75,17 +87,27 @@ export function ConfirmAndPayPage() {
       setTimeLeft((prev) => {
         if (prev <= 1 && !hasRedirected.current) {
           hasRedirected.current = true;
-          setTimeout(() => {
+          
+          const releaseHold = async () => {
+            if (holdId) {
+              try {
+                await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
+                console.log('[HOLD] Session expired, hold released:', holdId);
+              } catch (e) {
+                console.error('[HOLD] Failed to release hold:', e);
+              }
+            }
             alert('Payment session expired. Please try again.');
             navigate(-1);
-          }, 0);
+          };
+          releaseHold();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [navigate]);
+  }, [navigate, holdId]);
 
   const handleConfirm = async () => {
     if (isSubmitting) return;

@@ -22,7 +22,7 @@ export function ListingDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const [listing, setListing] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [checkIn, setCheckIn] = useState<Date | null>(null);
@@ -54,6 +54,7 @@ export function ListingDetailPage() {
             bookingType: data.booking_mode === 'INSTANT' ? 'instant' : 'request',
             imageUrl: data.image_url || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800',
             host: {
+              id: data.host_id,
               name: 'Sarah',
               avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
               isSuperhost: true,
@@ -82,6 +83,7 @@ export function ListingDetailPage() {
   const [showCheckOutCalendar, setShowCheckOutCalendar] = useState(false);
   const [datesLocked, setDatesLocked] = useState(false); // Track if dates are locked from search
   const [pendingBookingAction, setPendingBookingAction] = useState<'instant' | 'request' | null>(null);
+  const [pendingHold, setPendingHold] = useState<any>(null);
   const checkInRef = useRef<HTMLDivElement>(null);
   const checkOutRef = useRef<HTMLDivElement>(null);
 
@@ -97,18 +99,37 @@ export function ListingDetailPage() {
     setShowAuthModal(true);
   };
 
-  const handleAuthSuccess = () => {
-    // After successful login, proceed with the pending booking action
-    if (pendingBookingAction === 'instant') {
-      navigate(`/booking/confirm-and-pay/${id}`, {
-        state: { checkIn, checkOut, guests },
-      });
-    } else if (pendingBookingAction === 'request') {
-      navigate(`/booking/authorise-and-request/${id}`, {
-        state: { checkIn, checkOut, guests },
-      });
+  // Redirect effect when user becomes logged in with a pending action
+  useEffect(() => {
+    if (isLoggedIn && pendingBookingAction && listing) {
+      const state = { 
+        checkIn, 
+        checkOut, 
+        guests, 
+        holdId: pendingHold?.holdId, 
+        expireAt: pendingHold?.expireAt,
+        listingTitle: listing.propertyType,
+        imageUrl: listing.imageUrl,
+        price: listing.price,
+        hostId: listing.host.id
+      };
+
+      console.log(`[REDIRECTION] Navigating to ${pendingBookingAction} with state:`, state);
+
+      if (pendingBookingAction === 'instant') {
+        navigate(`/booking/confirm-and-pay/${id}`, { state });
+      } else if (pendingBookingAction === 'request') {
+        navigate(`/booking/authorise-and-request/${id}`, { state });
+      }
+      
+      setPendingBookingAction(null);
+      setPendingHold(null);
     }
-    setPendingBookingAction(null);
+  }, [isLoggedIn, pendingBookingAction, listing, checkIn, checkOut, guests, id, navigate, pendingHold]);
+
+  const handleAuthSuccess = () => {
+    // State effect above will handle navigation
+    console.log('[AUTH] Login successful, pending action:', pendingBookingAction);
   };
 
   // Pre-fill from search if available
@@ -166,52 +187,92 @@ export function ListingDetailPage() {
   const checkAvailabilityBeforeBooking = async () => {
     if (!checkIn || !checkOut) {
       alert('Please select check-in and check-out dates first');
-      return false;
+      return null;
     }
 
     try {
       const checkInStr = checkIn.toISOString().split('T')[0];
       const checkOutStr = checkOut.toISOString().split('T')[0];
-      const res = await fetch(`/availability?listingId=${id}&checkInDate=${checkInStr}&checkOutDate=${checkOutStr}`);
+      
+      // New flow: Communicate with Booking microservice to check availability and create a 15s soft hold
+      const res = await fetch('/bookings/request-hold', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          listingId: id,
+          guestId: user?.userId || 'anonymous',
+          checkInDate: checkInStr,
+          checkOutDate: checkOutStr,
+        }),
+      });
+      
       const json = await res.json();
       
       if (json.code === 200 && json.data.available) {
-        return true;
+        console.log('Soft hold successfully created via Booking Service:', {
+          holdId: json.data.holdId,
+          expireAt: json.data.expireAt,
+          status: json.data.status
+        });
+        return json.data;
       } else {
         alert('Sorry, this property is no longer available for these dates. Please try another date range.');
-        return false;
+        return null;
       }
     } catch (err) {
-      console.error('Availability check failed:', err);
-      // Fail open for UX if service is down? Let's be safe and fail closed
+      console.error('Booking service availability check failed:', err);
       alert('Could not verify availability. Please try again later.');
-      return false;
+      return null;
     }
   };
 
   const handleInstantBookClick = async () => {
-    const isAvailable = await checkAvailabilityBeforeBooking();
-    if (!isAvailable) return;
+    const holdData = await checkAvailabilityBeforeBooking();
+    if (!holdData) return;
 
     if (isLoggedIn) {
       navigate(`/booking/confirm-and-pay/${id}`, {
-        state: { checkIn, checkOut, guests },
+        state: { 
+          checkIn, 
+          checkOut, 
+          guests, 
+          holdId: holdData.holdId, 
+          expireAt: holdData.expireAt,
+          listingTitle: listing.propertyType,
+          imageUrl: listing.imageUrl,
+          price: listing.price,
+          hostId: listing.host.id
+        },
       });
     } else {
+      setPendingHold(holdData);
       setPendingBookingAction('instant');
       handleOpenAuth('login');
     }
   };
 
   const handleRequestBookClick = async () => {
-    const isAvailable = await checkAvailabilityBeforeBooking();
-    if (!isAvailable) return;
+    const holdData = await checkAvailabilityBeforeBooking();
+    if (!holdData) return;
 
     if (isLoggedIn) {
       navigate(`/booking/authorise-and-request/${id}`, {
-        state: { checkIn, checkOut, guests },
+        state: { 
+          checkIn, 
+          checkOut, 
+          guests, 
+          holdId: holdData.holdId, 
+          expireAt: holdData.expireAt,
+          listingTitle: listing.propertyType,
+          imageUrl: listing.imageUrl,
+          price: listing.price,
+          hostId: listing.host.id
+        },
       });
     } else {
+      setPendingHold(holdData);
       setPendingBookingAction('request');
       handleOpenAuth('login');
     }
