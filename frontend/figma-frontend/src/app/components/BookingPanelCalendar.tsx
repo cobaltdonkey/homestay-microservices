@@ -61,29 +61,28 @@ export function BookingPanelCalendar({
 
   const isDateInBlockedRange = (date: Date) => {
     return blockedRanges.some((range) => {
-      const rangeStart = new Date(range.start);
-      const rangeEnd = new Date(range.end);
-      rangeStart.setHours(0, 0, 0, 0);
-      rangeEnd.setHours(0, 0, 0, 0);
-      return date >= rangeStart && date <= rangeEnd;
+      // Normalize both to UTC midnight for comparison
+      const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      const s = new Date(range.start).setHours(0, 0, 0, 0);
+      const e = new Date(range.end).setHours(0, 0, 0, 0);
+      return d >= s && d < e; // Standard [check-in, check-out) logic
     });
   };
 
   const isDateDisabled = (date: Date) => {
     if (isPastDate(date)) return true;
+    
+    // Check if the date is in a blocked range
     if (isDateInBlockedRange(date)) return true;
 
     // If selecting checkout and we have a checkin, block dates that would overlap blocked ranges
     if (mode === 'checkout' && otherDate) {
-      const checkIn = new Date(otherDate);
-      checkIn.setHours(0, 0, 0, 0);
+      const checkInTime = new Date(otherDate).setHours(0, 0, 0, 0);
+      const dateTime = new Date(date).setHours(0, 0, 0, 0);
       
-      // Check if there's a blocked range between checkin and this date
       for (const range of blockedRanges) {
-        const rangeStart = new Date(range.start);
-        rangeStart.setHours(0, 0, 0, 0);
-        
-        if (rangeStart > checkIn && rangeStart <= date) {
+        const rangeStartTime = new Date(range.start).setHours(0, 0, 0, 0);
+        if (rangeStartTime > checkInTime && rangeStartTime < dateTime) {
           return true;
         }
       }
@@ -136,17 +135,17 @@ export function BookingPanelCalendar({
           key={day}
           onClick={() => handleDateClick(currentDate)}
           disabled={disabled}
-          className={`h-10 flex items-center justify-center text-sm relative rounded-full transition-colors
+          className={`h-10 w-full flex items-center justify-center text-sm relative rounded-full transition-colors
             ${disabled ? 'text-[#BBBBBB] cursor-not-allowed' : 'cursor-pointer'}
-            ${blocked ? 'relative' : ''}
+            ${blocked ? 'bg-[#F7F7F7]' : ''}
             ${isSelected ? 'bg-[#FF385C] text-white font-semibold z-10' : ''}
             ${!isSelected && !disabled ? 'hover:border-2 hover:border-[#222222]' : ''}
             ${isToday && !isSelected ? 'font-bold underline' : ''}
           `}
         >
           {blocked && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-[1px] h-full bg-[#BBBBBB] rotate-45" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-[80%] h-[2px] bg-[#717171] rotate-45 opacity-50" />
             </div>
           )}
           <span className="relative z-10">{day}</span>

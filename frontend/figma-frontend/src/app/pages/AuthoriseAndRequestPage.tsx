@@ -27,18 +27,31 @@ export function AuthoriseAndRequestPage() {
     title: routeState.listingTitle ?? 'Selected Listing',
     imageUrl: routeState.imageUrl ?? 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=300&q=80',
     rating: routeState.rating ?? 4.9,
+    hostId: routeState.hostId ?? 'af112c4e-8b77-46ac-9014-7cdb291e0023',
     reviewCount: routeState.reviewCount ?? 0,
     price: routeState.price ?? 0,
     nights: routeState.nights ?? 1,
     cleaningFee: 30,
     deposit: 200,
-    hostId: routeState.hostId ?? 'af112c4e-8b77-46ac-9014-7cdb291e0023',
   };
 
-  const checkIn: string = routeState.checkIn ?? '';
-  const checkOut: string = routeState.checkOut ?? '';
-  const total = listing.price * listing.nights + listing.cleaningFee + listing.deposit;
+  // Format dates to YYYY-MM-DD for the backend
+  const checkIn: string = routeState.checkIn ? new Date(routeState.checkIn).toISOString().split('T')[0] : '';
+  const checkOut: string = routeState.checkOut ? new Date(routeState.checkOut).toISOString().split('T')[0] : '';
+  const total = routeState.price * (routeState.nights || 1) + listing.cleaningFee + listing.deposit;
   const splitAmount = total / 2;
+
+  const formatDateShort = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const getCancellationDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
 
   // POST /availability/hold on mount
   useEffect(() => {
@@ -107,6 +120,10 @@ export function AuthoriseAndRequestPage() {
           paymentMethodId,
           holdId,
           bookingMode: 'REQUEST',
+          listingTitle: listing.title,
+          listingImage: listing.imageUrl,
+          totalAmount: total,
+          guests: routeState.guests || 1
         }),
       });
       const bookingJson = await bookingRes.json();
@@ -277,20 +294,20 @@ export function AuthoriseAndRequestPage() {
               <div className="space-y-3 border border-[#EBEBEB] rounded-lg p-4">
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Check-in</span>
-                  <span className="font-semibold text-[#222222]">15 Jun 2025</span>
+                  <span className="font-semibold text-[#222222]">{formatDateShort(checkIn)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Check-out</span>
-                  <span className="font-semibold text-[#222222]">18 Jun 2025</span>
+                  <span className="font-semibold text-[#222222]">{formatDateShort(checkOut)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Guests</span>
-                  <span className="font-semibold text-[#222222]">2</span>
+                  <span className="font-semibold text-[#222222]">{routeState.guests || 1}</span>
                 </div>
                 <div className="border-t border-[#EBEBEB] pt-3">
                   <span className="text-sm text-[#717171]">Cancellation policy</span>
                   <p className="text-sm text-[#222222] mt-1">
-                    Free cancellation before 12 Jun.{' '}
+                    Free cancellation before {getCancellationDate()}.{' '}
                     <button className="text-[#FF385C] hover:text-[#E31C5F] font-semibold underline">
                       Full policy
                     </button>
