@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
-import { ArrowLeft, Star, AlertCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Star, AlertCircle, Clock, CreditCard, Lock } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-export function AuthoriseAndRequestPage() {
+const stripePromise = loadStripe((import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY);
+
+function AuthoriseAndRequestPageInner() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
-  const [cardName, setCardName] = useState('');
+  const stripe = useStripe();
+  const elements = useElements();
   const routeState = location.state as any || {};
   const [timeLeft, setTimeLeft] = useState(() => {
     if (routeState.expireAt) {
@@ -115,21 +117,45 @@ export function AuthoriseAndRequestPage() {
   }, [timeLeft, navigate, holdId]);
 
   const handleRequest = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !stripe || !elements) return;
     setIsSubmitting(true);
     try {
-      // Step 1: Pre-authorize card via gateway
+      // Step 0: Stripe Tokenization (Demo Mode)
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) throw new Error("Card element not found");
+
+      const { error, paymentMethod } = await stripe.createPaymentMethod({
+        type: 'card',
+        card: cardElement,
+      });
+
+      if (error) {
+        alert(error.message);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      const realPaymentMethodId = paymentMethod.id;
+
+      // Step 1: Pre-authorize card via gateway API
       const authRes = await fetch('/gateway/authorize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: total,
           currency: 'SGD',
-          paymentMethodId: `card_${cardNumber.replace(/\s/g,'').slice(-4) || 'demo'}`,
+          paymentMethodId: realPaymentMethodId,
+          bookingId: `demo-${Date.now()}`,
+          idempotencyKey: `pay-${Date.now()}`
         }),
       });
       const authJson = await authRes.json();
-      const paymentMethodId = authJson.data?.paymentMethodId ?? 'card_demo';
+      if (authJson.code !== 200) {
+        alert(authJson.message || 'Payment gateway declined authorization.');
+        setIsSubmitting(false);
+        return;
+      }
+      const paymentMethodId = realPaymentMethodId;
 
       // Step 2: Create booking with REQUEST mode
       const bookingRes = await fetch('/bookings', {
@@ -164,11 +190,7 @@ export function AuthoriseAndRequestPage() {
     }
   };
 
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2, 4);
-    setExpiry(value);
-  };
+
 
   return (
     <div className="min-h-screen bg-white">
@@ -248,64 +270,34 @@ export function AuthoriseAndRequestPage() {
               </div>
             </div>
 
-            {/* Section 2: Add a payment method */}
+            {/* Section 2: Payment — Stripe Element */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">
-                2. Add a payment method
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-[#222222] mb-2">
-                    Card number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-[#222222] mb-2">
-                      Expiry
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="MM / YY"
-                      value={expiry}
-                      onChange={handleExpiryChange}
-                      maxLength={5}
-                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-[#222222] mb-2">
-                      CVC
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123"
-                      value={cvc}
-                      onChange={(e) => setCvc(e.target.value)}
-                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                    />
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card via Stripe API (Demo)</h2>
+              <div className="border border-[#EBEBEB] rounded-xl overflow-hidden bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-4 text-[#717171]">
+                  <CreditCard className="w-5 h-5" />
+                  <span className="text-sm font-semibold">Credit or Debit Card</span>
+                  <div className="ml-auto flex items-center gap-1 text-xs">
+                    <Lock className="w-3 h-3" />
+                    Test Demo API
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-[#222222] mb-2">
-                    Name on card
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="John Doe"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                  />
+                
+                <div className="p-4 border border-[#EBEBEB] rounded-lg bg-[#F7F7F7]">
+                  <CardElement options={{
+                    style: {
+                      base: {
+                        fontSize: '16px',
+                        color: '#222222',
+                        '::placeholder': {
+                          color: '#aab7c4',
+                        },
+                      },
+                      invalid: {
+                        color: '#FF385C',
+                      },
+                    },
+                  }} />
                 </div>
               </div>
             </div>
@@ -406,5 +398,13 @@ export function AuthoriseAndRequestPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function AuthoriseAndRequestPage() {
+  return (
+    <Elements stripe={stripePromise}>
+      <AuthoriseAndRequestPageInner />
+    </Elements>
   );
 }
