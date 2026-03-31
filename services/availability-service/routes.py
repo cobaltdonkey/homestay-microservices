@@ -141,18 +141,22 @@ def create_hold():
 def extend_hold(hold_id):
     data = request.json or {}
     ttl_seconds = data.get('ttlSeconds')
+    booking_id = data.get('bookingId')
     reason = data.get('reason')
 
-    if not ttl_seconds:
-        return jsonify({"code": 400, "data": {}, "message": "ttlSeconds is required"}), 400
+    if not any([ttl_seconds, booking_id, reason]):
+        return jsonify({"code": 400, "data": {}, "message": "At least one of [ttlSeconds, bookingId, reason] is required"}), 400
 
     hold = Hold.query.get(hold_id)
     if not hold:
         return jsonify({"code": 404, "data": {}, "message": "Hold not found"}), 404
 
     try:
-        hold.ttl_seconds = ttl_seconds
-        hold.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+        if ttl_seconds:
+            hold.ttl_seconds = ttl_seconds
+            hold.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+        if booking_id:
+            hold.booking_id = booking_id
         if reason:
             hold.reason = reason
         db.session.commit()
@@ -218,4 +222,64 @@ def delete_hold(hold_id):
         "code": 200,
         "data": {},
         "message": "Hold deleted successfully"
+    }), 200
+
+@main.route('/reservations', methods=['POST'])
+def create_reservation():
+    data = request.json or {}
+    listing_id = data.get('listingId')
+    booking_id = data.get('bookingId')
+    guest_id = data.get('guestId')
+    check_in_str = data.get('checkInDate')
+    check_out_str = data.get('checkOutDate')
+
+    if not all([listing_id, booking_id, guest_id, check_in_str, check_out_str]):
+        return jsonify({"code": 400, "data": {}, "message": "Missing required fields"}), 400
+
+    try:
+        check_in_date = datetime.strptime(check_in_str, '%Y-%m-%d').date()
+        check_out_date = datetime.strptime(check_out_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"code": 400, "data": {}, "message": "Invalid date format, use YYYY-MM-DD"}), 400
+
+    reservation_id = str(uuid.uuid4())
+    new_reservation = Reservation(
+        reservation_id=reservation_id,
+        listing_id=listing_id,
+        booking_id=booking_id,
+        guest_id=guest_id,
+        check_in_date=check_in_date,
+        check_out_date=check_out_date
+    )
+
+    try:
+        db.session.add(new_reservation)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
+
+    return jsonify({
+        "code": 201,
+        "data": new_reservation.to_dict(),
+        "message": "Reservation created successfully"
+    }), 201
+
+@main.route('/reservations/booking/<string:booking_id>', methods=['DELETE'])
+def delete_reservation_by_booking(booking_id):
+    reservation = Reservation.query.filter_by(booking_id=booking_id).first()
+    if not reservation:
+        return jsonify({"code": 404, "data": {}, "message": "Reservation not found"}), 404
+
+    try:
+        db.session.delete(reservation)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
+
+    return jsonify({
+        "code": 200,
+        "data": {},
+        "message": "Reservation deleted successfully"
     }), 200

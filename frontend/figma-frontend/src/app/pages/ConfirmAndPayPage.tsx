@@ -1,33 +1,38 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
-import { ArrowLeft, Star, Clock } from 'lucide-react';
+import { ArrowLeft, Star, Clock, CreditCard, CheckCircle, Lock, Wallet } from 'lucide-react';
+
+// Demo wallet stored in sessionStorage so it persists across pages but resets on new tab/session
+const WALLET_KEY = 'secondhome_demo_wallet';
+const INITIAL_BALANCE = 5000;
+
+function getWalletBalance(): number {
+  const stored = sessionStorage.getItem(WALLET_KEY);
+  return stored ? parseFloat(stored) : INITIAL_BALANCE;
+}
+
+function setWalletBalance(amount: number) {
+  sessionStorage.setItem(WALLET_KEY, amount.toFixed(2));
+}
 
 export function ConfirmAndPayPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
-  const [cardName, setCardName] = useState('');
-  const routeState = location.state as any || {};
-  const [timeLeft, setTimeLeft] = useState(() => {
-    if (routeState.expireAt) {
-      const expiry = new Date(routeState.expireAt).getTime();
-      const now = new Date().getTime();
-      const diff = Math.floor((expiry - now) / 1000);
-      console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
-      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
-    }
-    return 60;
-  });
-  const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
+  const [timeLeft, setTimeLeft] = useState(45); // 45-second soft hold
+  const [holdId, setHoldId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [walletBalance, setWalletBalanceState] = useState<number>(getWalletBalance());
+  const [paymentReady, setPaymentReady] = useState(false); // user clicked "Use Demo Wallet"
   const hasRedirected = useRef(false);
 
-  // Booking context from router state
+  // Card is valid when wallet is used
+  const isCardValid = paymentReady;
+
+  // Read booking context from router state
+  const routeState = location.state as any || {};
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
@@ -38,21 +43,34 @@ export function ConfirmAndPayPage() {
     title: routeState.listingTitle ?? 'Selected Listing',
     imageUrl: routeState.imageUrl ?? 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=300&q=80',
     rating: routeState.rating ?? 4.9,
+    hostId: routeState.hostId ?? 'af112c4e-8b77-46ac-9014-7cdb291e0023',
     reviewCount: routeState.reviewCount ?? 0,
     price: routeState.price ?? 0,
     nights: routeState.nights ?? 1,
     cleaningFee: 30,
     deposit: 200,
-    hostId: routeState.hostId ?? 'af112c4e-8b77-46ac-9014-7cdb291e0023',
   };
 
-  const checkIn: string = routeState.checkIn ?? '';
-  const checkOut: string = routeState.checkOut ?? '';
+  // Format dates to YYYY-MM-DD for the backend
+  const checkIn: string = routeState.checkIn ? new Date(routeState.checkIn).toISOString().split('T')[0] : '';
+  const checkOut: string = routeState.checkOut ? new Date(routeState.checkOut).toISOString().split('T')[0] : '';
 
-  const total = listing.price * listing.nights + listing.cleaningFee + listing.deposit;
+  const total = routeState.price * (routeState.nights || 1) + listing.cleaningFee + listing.deposit;
   const splitAmount = total / 2;
 
-  // POST /availability/hold on mount IF NO HOLD EXISTS
+  const formatDateShort = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const getCancellationDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+
+  // POST /availability/hold on mount
   useEffect(() => {
     if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
@@ -111,22 +129,33 @@ export function ConfirmAndPayPage() {
 
   const handleConfirm = async () => {
     if (isSubmitting) return;
+    if (walletBalance < total) {
+      alert('Insufficient wallet balance to complete this booking.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      // Step 1: Simulate gateway charge (POST /gateway/charge)
+      // Deduct from wallet immediately
+      const newBalance = walletBalance - total;
+      setWalletBalance(newBalance);
+      setWalletBalanceState(newBalance);
+
+      // Step 1: Simulate gateway charge
       const gatewayRes = await fetch('/gateway/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: total,
           currency: 'SGD',
-          paymentMethodId: `card_${cardNumber.replace(/\s/g,'').slice(-4) || 'demo'}`,
+          paymentMethodId: 'pm_demo_wallet',
+          bookingId: `demo-${Date.now()}`,
+          idempotencyKey: `pay-${Date.now()}`,
           description: `Booking for listing ${id}`,
         }),
       });
       const gatewayJson = await gatewayRes.json();
-      const paymentTxnId = gatewayJson.data?.transactionId ?? 'txn_demo';
-      const paymentMethodId = gatewayJson.data?.paymentMethodId ?? 'card_demo';
+      const paymentTxnId = gatewayJson.data?.paymentTxnId ?? gatewayJson.data?.transactionId ?? 'txn_demo';
+      const paymentMethodId = 'pm_demo_wallet';
 
       // Step 2: Create booking (POST /bookings)
       const bookingRes = await fetch('/bookings', {
@@ -142,11 +171,26 @@ export function ConfirmAndPayPage() {
           paymentTxnId,
           holdId,
           bookingMode: 'INSTANT',
+          listingTitle: listing.title,
+          listingImage: listing.imageUrl,
+          totalAmount: total,
+          guests: routeState.guests || 1
         }),
       });
       const bookingJson = await bookingRes.json();
       if (bookingJson.code === 201 || bookingJson.code === 200) {
-        navigate(`/booking/confirmed/${bookingJson.data?.bookingId ?? id}`);
+        navigate(`/booking/confirmed/${bookingJson.data?.bookingId ?? id}`, {
+          state: {
+            bookingId: bookingJson.data?.bookingId ?? id,
+            listingTitle: listing.title,
+            listingImage: listing.imageUrl,
+            checkIn,
+            checkOut,
+            guests: routeState.guests || 1,
+            total,
+            nights: listing.nights,
+          }
+        });
       } else {
         alert(bookingJson.message ?? 'Booking failed. Please try again.');
       }
@@ -156,12 +200,6 @@ export function ConfirmAndPayPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length >= 2) value = value.slice(0, 2) + '/' + value.slice(2, 4);
-    setExpiry(value);
   };
 
   return (
@@ -234,64 +272,90 @@ export function ConfirmAndPayPage() {
               </div>
             </div>
 
-            {/* Section 2: Add a payment method */}
+            {/* Section 2: Payment — Demo Stripe Wallet */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">
-                2. Add a payment method
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-[#222222] mb-2">
-                    Card number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                  />
-                </div>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Payment method</h2>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-[#222222] mb-2">
-                      Expiry
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="MM / YY"
-                      value={expiry}
-                      onChange={handleExpiryChange}
-                      maxLength={5}
-                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                    />
+              {/* Wallet balance card */}
+              <div className="border-2 border-[#EBEBEB] rounded-xl overflow-hidden">
+                {/* Stripe-branded header */}
+                <div className="bg-gradient-to-r from-[#635BFF] to-[#8B83FF] px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                      <Wallet className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white/80 text-xs font-medium">Demo Wallet — Powered by</p>
+                      <p className="text-white font-bold text-sm">stripe</p>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-[#222222] mb-2">
-                      CVC
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123"
-                      value={cvc}
-                      onChange={(e) => setCvc(e.target.value)}
-                      className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                    />
+                  <div className="flex items-center gap-1 text-white/80 text-xs">
+                    <Lock className="w-3 h-3" />
+                    Test mode
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-[#222222] mb-2">
-                    Name on card
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="John Doe"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                    className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C]"
-                  />
+                {/* Balance display */}
+                <div className="px-6 py-5 bg-white">
+                  <p className="text-sm text-[#717171] mb-1">Available Balance</p>
+                  <p className={`text-3xl font-bold mb-4 ${
+                    walletBalance >= total ? 'text-[#222222]' : 'text-[#FF385C]'
+                  }`}>
+                    SGD {walletBalance.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+
+                  {total > 0 && (
+                    <div className="bg-[#F7F7F7] rounded-lg p-3 mb-4 text-sm">
+                      <div className="flex justify-between text-[#717171] mb-1">
+                        <span>This booking</span>
+                        <span className="font-semibold text-[#222222]">− SGD {total.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-[#717171]">
+                        <span>Balance after</span>
+                        <span className={`font-semibold ${
+                          walletBalance - total >= 0 ? 'text-[#008A05]' : 'text-[#FF385C]'
+                        }`}>
+                          SGD {Math.max(0, walletBalance - total).toLocaleString('en-SG', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Demo test card info */}
+                  <div className="border border-[#EBEBEB] rounded-lg p-3 mb-4 flex items-center gap-3">
+                    <CreditCard className="w-5 h-5 text-[#635BFF] flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-[#222222]">Demo Card on File</p>
+                      <p className="text-xs text-[#717171]">Visa •••• 4242 | Exp 12/30</p>
+                    </div>
+                    <div className="ml-auto">
+                      <CheckCircle className="w-4 h-4 text-[#008A05]" />
+                    </div>
+                  </div>
+
+                  {!paymentReady ? (
+                    <button
+                      onClick={() => setPaymentReady(true)}
+                      disabled={walletBalance < total}
+                      className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
+                        walletBalance >= total
+                          ? 'bg-[#635BFF] hover:bg-[#5144E8] text-white'
+                          : 'bg-[#EBEBEB] text-[#717171] cursor-not-allowed'
+                      }`}
+                    >
+                      <Wallet className="w-4 h-4" />
+                      {walletBalance >= total ? 'Use Demo Wallet to Pay' : 'Insufficient Balance'}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-[#F0FFF4] border border-[#008A05]/30 rounded-lg px-4 py-3">
+                      <CheckCircle className="w-5 h-5 text-[#008A05]" />
+                      <span className="text-sm font-semibold text-[#008A05]">Wallet selected — ready to pay</span>
+                      <button
+                        onClick={() => setPaymentReady(false)}
+                        className="ml-auto text-xs text-[#717171] hover:underline"
+                      >Change</button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -304,20 +368,20 @@ export function ConfirmAndPayPage() {
               <div className="space-y-3 border border-[#EBEBEB] rounded-lg p-4">
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Check-in</span>
-                  <span className="font-semibold text-[#222222]">15 Jun 2025</span>
+                  <span className="font-semibold text-[#222222]">{formatDateShort(checkIn)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Check-out</span>
-                  <span className="font-semibold text-[#222222]">18 Jun 2025</span>
+                  <span className="font-semibold text-[#222222]">{formatDateShort(checkOut)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#717171]">Guests</span>
-                  <span className="font-semibold text-[#222222]">2</span>
+                  <span className="font-semibold text-[#222222]">{routeState.guests || 1}</span>
                 </div>
                 <div className="border-t border-[#EBEBEB] pt-3">
                   <span className="text-sm text-[#717171]">Cancellation policy</span>
                   <p className="text-sm text-[#222222] mt-1">
-                    Free cancellation before 12 Jun.{' '}
+                    Free cancellation before {getCancellationDate()}.{' '}
                     <button className="text-[#FF385C] hover:text-[#E31C5F] font-semibold underline">
                       Full policy
                     </button>
@@ -372,9 +436,14 @@ export function ConfirmAndPayPage() {
               {/* Confirm Button */}
               <button
                 onClick={handleConfirm}
-                className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors mb-3"
+                disabled={!isCardValid || isSubmitting}
+                className={`w-full font-semibold py-3 rounded-lg transition-colors mb-3 ${
+                  isCardValid && !isSubmitting
+                    ? 'bg-[#FF385C] hover:bg-[#E31C5F] text-white cursor-pointer'
+                    : 'bg-[#EBEBEB] text-[#717171] cursor-not-allowed'
+                }`}
               >
-                Confirm and pay
+                {isSubmitting ? 'Processing...' : 'Confirm and pay'}
               </button>
 
               {/* Note */}

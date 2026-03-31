@@ -1,5 +1,5 @@
 import { X, Star, Clock } from 'lucide-react';
-import { StatusBadge } from './StatusBadge';
+import { StatusBadge, BookingStatus } from './StatusBadge';
 
 interface Booking {
   id: string;
@@ -7,9 +7,10 @@ interface Booking {
   listingTitle: string;
   listingImage: string;
   dates: string;
-  status: 'awaiting_payment' | 'confirmed' | 'paid' | 'pending_host' | 'rejected' | 'expired' | 'completed' | 'cancelled';
+  status: BookingStatus;
   guests: number;
   total: number;
+  createdAt: string;
   timeRemaining?: { hours: number; minutes: number; seconds: number };
 }
 
@@ -88,7 +89,7 @@ export function BookingDetailModal({ booking, onClose }: BookingDetailModalProps
           </div>
 
           {/* Countdown Timer for Pending Host */}
-          {booking.status === 'pending_host' && booking.timeRemaining && (
+          {booking.status === 'PENDING_HOST' && booking.timeRemaining && (
             <div className="bg-[#FFF9E6] border border-[#FFE066] rounded-xl p-4 mb-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -132,7 +133,7 @@ export function BookingDetailModal({ booking, onClose }: BookingDetailModalProps
           </div>
 
           {/* Deposit Status */}
-          <div className="bg-[#F7F7F7] rounded-lg p-4">
+          <div className="bg-[#F7F7F7] rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center">
               <span className="font-semibold text-[#222222]">Deposit Status</span>
               <StatusBadge status="PAID" />
@@ -141,6 +142,72 @@ export function BookingDetailModal({ booking, onClose }: BookingDetailModalProps
               Security deposit will be released 48 hours after check-out if no damage is reported
             </p>
           </div>
+
+          {/* Cancellation Button */}
+          {booking.status !== 'CANCELLED' && booking.status !== 'REJECTED' && (
+            <div className="space-y-3">
+              <button
+                onClick={async () => {
+                  if (window.confirm('Are you sure you want to cancel this booking?')) {
+                    try {
+                      const res = await fetch(`/bookings/${booking.bookingId}/cancel`, { method: 'POST' });
+                      if (res.ok) {
+                        alert('Booking cancelled successfully');
+                        window.location.reload(); // Refresh to show updated status
+                      } else {
+                        const err = await res.json();
+                        alert(`Failed to cancel: ${err.message || 'Unknown error'}`);
+                      }
+                    } catch (e) {
+                      alert('Network error while cancelling');
+                    }
+                  }
+                }}
+                disabled={(() => {
+                  const createdDate = new Date(booking.createdAt);
+                  const now = new Date();
+                  const diffHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+                  return diffHours >= 48;
+                })()}
+                className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+                  (() => {
+                    const createdDate = new Date(booking.createdAt);
+                    const now = new Date();
+                    const diffHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+                    return diffHours < 48;
+                  })() 
+                  ? 'bg-white border-2 border-[#FF385C] text-[#FF385C] hover:bg-[#FFF5F7]' 
+                  : 'bg-[#EBEBEB] text-[#717171] cursor-not-allowed'
+                }`}
+              >
+                {(() => {
+                  const createdDate = new Date(booking.createdAt);
+                  const now = new Date();
+                  const diffHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+                  return diffHours < 48 ? 'Cancel Booking' : 'Cancellation No Longer Available';
+                })()}
+              </button>
+              
+              {(() => {
+                const createdDate = new Date(booking.createdAt);
+                const now = new Date();
+                const diffHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+                if (diffHours < 48) {
+                  const remainingHours = Math.floor(48 - diffHours);
+                  return (
+                    <p className="text-center text-xs text-[#717171]">
+                      You can cancel for free within the next {remainingHours} hours.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-center text-xs text-[#717171]">
+                    The 48-hour free cancellation window has passed.
+                  </p>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -25,6 +25,7 @@ export function ListingDetailPage() {
   const { isLoggedIn, user } = useAuth();
   const [listing, setListing] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [blockedRanges, setBlockedRanges] = useState<{ start: Date; end: Date }[]>([]);
   const [checkIn, setCheckIn] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -72,6 +73,28 @@ export function ListingDetailPage() {
       }
     };
     fetchListing();
+
+    // Fetch booked date ranges from booking-service
+    const fetchBookedDates = async () => {
+      if (!id) return;
+      try {
+        const res = await fetch(`/bookings/listings/${id}/booked-dates`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.code === 200 && Array.isArray(json.data)) {
+            console.log(`[DEBUG] Fetched ${json.data.length} booked ranges for listing ${id}`);
+            const ranges = json.data.map((r: any) => ({
+              start: new Date(r.checkInDate + 'T00:00:00'),
+              end: new Date(r.checkOutDate + 'T00:00:00'),
+            }));
+            setBlockedRanges(ranges);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch booked dates:', err);
+      }
+    };
+    fetchBookedDates();
   }, [id]);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
@@ -168,11 +191,6 @@ export function ListingDetailPage() {
     return <div className="min-h-screen flex items-center justify-center text-xl text-[#717171]">Listing not found</div>;
   }
 
-  // Convert blocked dates to Date objects
-  const blockedRanges = listing.blockedDates.map((range: any) => ({
-    start: new Date(range.start),
-    end: new Date(range.end),
-  }));
 
   // Calculate nights and pricing
   const nights =
@@ -237,13 +255,13 @@ export function ListingDetailPage() {
         state: { 
           checkIn, 
           checkOut, 
-          guests, 
-          holdId: holdData.holdId, 
-          expireAt: holdData.expireAt,
+          guests,
           listingTitle: listing.propertyType,
           imageUrl: listing.imageUrl,
           price: listing.price,
-          hostId: listing.host.id
+          rating: listing.rating,
+          reviewCount: listing.reviewCount,
+          nights
         },
       });
     } else {
@@ -262,13 +280,13 @@ export function ListingDetailPage() {
         state: { 
           checkIn, 
           checkOut, 
-          guests, 
-          holdId: holdData.holdId, 
-          expireAt: holdData.expireAt,
+          guests,
           listingTitle: listing.propertyType,
           imageUrl: listing.imageUrl,
           price: listing.price,
-          hostId: listing.host.id
+          rating: listing.rating,
+          reviewCount: listing.reviewCount,
+          nights
         },
       });
     } else {

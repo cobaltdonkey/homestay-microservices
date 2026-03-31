@@ -4,7 +4,7 @@ from db import db
 
 class Hold(db.Model):
     __tablename__ = 'hold'
-    __table_args__ = {"schema": "availability_db"}
+    __table_args__ = {'schema': 'availability_db'}
 
     hold_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     listing_id = db.Column(db.String(36), nullable=False)
@@ -35,7 +35,7 @@ class Hold(db.Model):
 
 class Reservation(db.Model):
     __tablename__ = 'reservation'
-    __table_args__ = {"schema": "availability_db"}
+    __table_args__ = {'schema': 'availability_db'}
 
     reservation_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     listing_id = db.Column(db.String(36), nullable=False)

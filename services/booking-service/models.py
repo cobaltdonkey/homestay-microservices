@@ -6,6 +6,7 @@ from shared.constants import *
 
 class Booking(db.Model):
     __tablename__ = 'booking'
+    __table_args__ = {'schema': 'booking'}
 
     booking_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     guest_id = db.Column(db.String(36), nullable=False)
@@ -20,6 +21,13 @@ class Booking(db.Model):
     deposit_txn_id = db.Column(db.String(100), nullable=True)
     booking_mode = db.Column(db.String(20), nullable=False)
     status = db.Column(db.String(30), nullable=False, default=BOOKING_STATUS_AWAITING_PAYMENT)
+    
+    # New fields for My Trips
+    listing_title = db.Column(db.String(255), nullable=True)
+    listing_image = db.Column(db.Text, nullable=True)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    guests = db.Column(db.Integer, nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -38,6 +46,10 @@ class Booking(db.Model):
             "depositTxnId": self.deposit_txn_id,
             "bookingMode": self.booking_mode,
             "status": self.status,
+            "listingTitle": self.listing_title,
+            "listingImage": self.listing_image,
+            "totalAmount": float(self.total_amount) if self.total_amount is not None else 0,
+            "guests": self.guests or 0,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
         }
