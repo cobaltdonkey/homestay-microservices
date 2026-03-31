@@ -19,9 +19,9 @@ export function AuthoriseAndRequestPage() {
       const now = new Date().getTime();
       const diff = Math.floor((expiry - now) / 1000);
       console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
-      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
+      return diff > 5 ? diff : 30; // fallback to 30s if timezone parsing failed
     }
-    return 60;
+    return 30;
   });
   const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,26 +62,27 @@ export function AuthoriseAndRequestPage() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
-  // POST /availability/hold on mount
+  // POST /bookings/request-hold on mount
   useEffect(() => {
     if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
       try {
-        const res = await fetch('/availability/hold', {
+        const res = await fetch('/bookings/request-hold', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             listingId: id,
             guestId,
             checkInDate: checkIn,
-            checkOutDate: checkOut,
-            ttlSeconds: 60,
+            checkOutDate: checkOut
           }),
         });
         const json = await res.json();
-        if (json.code === 201) {
-          setHoldId(json.data?.holdId ?? null);
-          setTimeLeft(15);
+        if (json.code === 201 || json.code === 200) {
+          setHoldId(json.data.holdId);
+          if (json.data.expireAt) {
+            setTimeLeft(30);
+          }
         }
       } catch (err) {
         console.error('Hold failed:', err);
@@ -97,7 +98,7 @@ export function AuthoriseAndRequestPage() {
       const releaseHold = async () => {
         if (holdId) {
           try {
-            await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
+            await fetch(`/bookings/request-hold/${holdId}`, { method: 'DELETE' });
             console.log('[HOLD] Session expired, hold released:', holdId);
           } catch (e) {
             console.error('[HOLD] Failed to release hold:', e);
