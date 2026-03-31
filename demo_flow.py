@@ -4,7 +4,7 @@ demo_flow.py — Automated Demo Flow for Homestay Platform
 Usage:
   python demo_flow.py --guest <guestId> --listing <instantListingId>
 
-Get IDs from: python seed_data.py
+Get IDs from: python infra/seed_supabase.py
 """
 
 import requests
@@ -119,9 +119,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run the instant booking demo flow end-to-end.")
     parser.add_argument("--guest",   required=True,
-        help="Guest user ID (from seed_data.py output)")
+        help="Guest user ID (from infra/seed_supabase.py output)")
     parser.add_argument("--listing", required=True,
-        help="Instant listing ID (from seed_data.py output)")
+        help="Instant listing ID (from infra/seed_supabase.py output)")
     args = parser.parse_args()
 
     run_demo(args.guest, args.listing)

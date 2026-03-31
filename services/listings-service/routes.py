@@ -3,7 +3,8 @@ import uuid
 from flask import Blueprint, request, jsonify
 from models import PropertyDetails
 from db import db
-from shared.constants import BOOKING_MODE_INSTANT, BOOKING_MODE_REQUEST
+from shared.constants import BOOKING_MODE_INSTANT, BOOKING_MODE_REQUEST, LISTINGS_SEARCH_SERVICE_URL
+import requests
 
 main = Blueprint('main', __name__)
 
@@ -51,6 +52,12 @@ def create_listing():
     except Exception as e:
         db.session.rollback()
         return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
+
+    # Index listing for search
+    try:
+        requests.post(f"{LISTINGS_SEARCH_SERVICE_URL}/listings/index", json=new_listing.to_dict(), timeout=3)
+    except Exception as e:
+        print(f"Warning: Failed to index listing {listing_id}: {e}")
 
     return jsonify({
         "code": 201,
