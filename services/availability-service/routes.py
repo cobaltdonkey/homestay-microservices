@@ -9,6 +9,13 @@ main = Blueprint('main', __name__)
 
 @main.route('/health', methods=['GET'])
 def health():
+    # Proactive cleanup of expired holds on every heartbeat
+    try:
+        Hold.query.filter(Hold.expires_at <= datetime.utcnow()).delete()
+        db.session.commit()
+    except:
+        db.session.rollback()
+
     return jsonify({
         "code": 200,
         "data": {
@@ -23,11 +30,12 @@ def check_availability(listing_id, check_in_date, check_out_date):
     
     # 0. Clean up any expired holds to allow others to book immediately
     try:
+        # Delete EXPIRED holds regardless of status if they have passed their deadline
         Hold.query.filter(
-            Hold.expires_at <= now,
-            Hold.status == 'HELD'
+            Hold.expires_at <= now
         ).delete()
         db.session.commit()
+        print(f"[CLEANUP] Deleted expired holds at {now}", flush=True)
     except Exception as e:
         db.session.rollback()
         print(f"[ERROR] Hold cleanup failed: {e}", flush=True)

@@ -78,7 +78,6 @@ export function ConfirmAndPayPage() {
   };
 
 
-
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -89,7 +88,7 @@ export function ConfirmAndPayPage() {
           const releaseHold = async () => {
             if (holdId) {
               try {
-                await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
+                await fetch(`/bookings/request-hold/${holdId}`, { method: 'DELETE' });
                 console.log('[HOLD] Session expired, hold released:', holdId);
               } catch (e) {
                 console.error('[HOLD] Failed to release hold:', e);

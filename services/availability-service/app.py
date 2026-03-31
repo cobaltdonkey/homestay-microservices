@@ -1,13 +1,32 @@
 import os
+import threading
+import time
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 from flask import Flask
 from db import db
 from routes import main
-from dotenv import load_dotenv
 
-load_dotenv()
+def run_cleanup(app):
+    with app.app_context():
+        while True:
+            try:
+                from models import Hold
+                from db import db
+                now = datetime.utcnow()
+                # Delete EXPIRED holds if they have passed their deadline
+                count = Hold.query.filter(Hold.expires_at <= now).delete()
+                if count > 0:
+                    db.session.commit()
+                    print(f"[BACKGROUND CLEANUP] Deleted {count} expired holds at {now}", flush=True)
+                else:
+                    db.session.rollback()
+            except Exception as e:
+                db.session.rollback()
+                print(f"[BACKGROUND CLEANUP ERROR] {e}", flush=True)
+            time.sleep(5)
 
 def create_app():
     app = Flask(__name__)
@@ -26,6 +45,10 @@ def create_app():
 
     db.init_app(app)
     app.register_blueprint(main)
+
+    # Start the background background cleanup thread
+    cleanup_thread = threading.Thread(target=run_cleanup, args=(app,), daemon=True)
+    cleanup_thread.start()
 
     return app
 
