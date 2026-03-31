@@ -16,6 +16,57 @@ def health():
         "message": "success"}), 200
 
 
+@bp.route('/request-hold', methods=['POST'])
+@bp.route('/bookings/request-hold', methods=['POST'])
+def request_hold():
+    try:
+        body = request.get_json() or {}
+        listingId = body.get('listingId')
+        guestId = body.get('guestId')
+        checkInDate = body.get('checkInDate')
+        checkOutDate = body.get('checkOutDate')
+
+        if not all([listingId, guestId, checkInDate, checkOutDate]):
+             return jsonify({"code": 400, "data": None, "message": "Missing required fields"}), 400
+
+        # Create hold
+        status_code, data = call_service("post",
+            f"{AVAILABILITY_SERVICE_URL}/holds",
+            {"listingId": listingId, "guestId": guestId,
+             "checkInDate": checkInDate, "checkOutDate": checkOutDate,
+             "ttlSeconds": 30})
+        
+        if status_code != 201:
+            return jsonify({"code": 409, "data": {"available": False}, "message": "Could not hold dates"}), 409
+
+        holdData = data.get("data", {})
+        holdId = holdData.get("holdId")
+        expireAt = holdData.get("expiresAt")
+        
+        return jsonify({
+            "code": 200,
+            "data": {
+                "available": True,
+                "holdId": holdId,
+                "expireAt": expireAt,
+                "status": "HELD"
+            },
+            "message": "success"
+        }), 200
+    except Exception as e:
+        print(f"[CRITICAL] request_hold crashed: {e}", flush=True)
+        return jsonify({"code": 500, "data": str(e), "message": "Internal server error"}), 500
+
+
+@bp.route('/request-hold/<holdId>', methods=['DELETE'])
+@bp.route('/bookings/request-hold/<holdId>', methods=['DELETE'])
+def release_hold(holdId):
+    # Proxy the delete request to availability-service
+    status_code, data = call_service("delete", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}")
+    return jsonify({"code": status_code, "data": data.get("data"), "message": data.get("message")}), status_code
+
+
+
 @bp.route('/', methods=['POST'])
 @bp.route('/bookings', methods=['POST'])
 @bp.route('/initiate', methods=['POST'])
@@ -29,6 +80,8 @@ def initiate_booking():
         checkOutDate = body.get('checkOutDate')
         paymentMethodId = body.get('paymentMethodId')
         bookingMode = body.get('bookingMode')
+        
+        holdId = body.get('holdId')
         
         # Optional fields for My Trips
         listingTitle = body.get('listingTitle')
@@ -103,6 +156,10 @@ def initiate_booking():
                 {"listingId": listingId, "bookingId": bookingId,
                  "guestId": guestId, "checkInDate": checkInDate,
                  "checkOutDate": checkOutDate})
+                 
+            # Also optionally cleanup the soft hold if it existed
+            if holdId:
+                call_service("delete", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}")
 
             # Step 8 — Notify services (Asynchronous-like)
             call_service("post", f"{STAY_SERVICE_URL}/stays",
@@ -128,22 +185,28 @@ def initiate_booking():
     hostId = listing["hostId"]
     pricePerNight = float(listing["pricePerNight"])
 
-    # Step 2 — Check availability
-    status_code, data = call_service("get",
-        f"{AVAILABILITY_SERVICE_URL}/availability"
-        f"?listingId={listingId}&checkInDate={checkInDate}&checkOutDate={checkOutDate}")
-    if status_code != 200 or not data["data"]["available"]:
-        return jsonify({"code": 409, "data": None, "message": "Dates not available"}), 409
+    if not holdId:
+        # Step 2 — Check availability
+        status_code, data = call_service("get",
+            f"{AVAILABILITY_SERVICE_URL}/availability"
+            f"?listingId={listingId}&checkInDate={checkInDate}&checkOutDate={checkOutDate}")
+        if status_code != 200 or not data["data"]["available"]:
+            return jsonify({"code": 409, "data": None, "message": "Dates not available"}), 409
 
-    # Step 3 — Create hold
-    status_code, data = call_service("post",
-        f"{AVAILABILITY_SERVICE_URL}/holds",
-        {"listingId": listingId, "guestId": guestId,
-         "checkInDate": checkInDate, "checkOutDate": checkOutDate,
-         "ttlSeconds": 900})
-    if status_code != 201:
-        return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
-    holdId = data["data"]["holdId"]
+        # Step 3 — Create hold
+        status_code, data = call_service("post",
+            f"{AVAILABILITY_SERVICE_URL}/holds",
+            {"listingId": listingId, "guestId": guestId,
+             "checkInDate": checkInDate, "checkOutDate": checkOutDate,
+             "ttlSeconds": 86400}) # 24h
+        if status_code != 201:
+            return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
+        holdId = data["data"]["holdId"]
+    else:
+        # Extend the existing hold (that is about to expire) for 24 hours
+        call_service("put",
+            f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST"})
 
     # Step 4 — Calculate amounts
     ci = date.fromisoformat(checkInDate)
