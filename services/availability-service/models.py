@@ -4,6 +4,7 @@ from db import db
 
 class Hold(db.Model):
     __tablename__ = 'hold'
+    __table_args__ = {"schema": "availability_db"}
 
     hold_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     listing_id = db.Column(db.String(36), nullable=False)
@@ -14,7 +15,7 @@ class Hold(db.Model):
     ttl_seconds = db.Column(db.Integer, nullable=False, default=900)
     expires_at = db.Column(db.DateTime, nullable=False)
     reason = db.Column(db.String(100))
-    status = db.Column(db.Enum('HELD', 'PENDING_HOST', 'EXPIRED', 'CONFIRMED', 'RELEASED', name='status_enum'), nullable=False, default='HELD')
+    status = db.Column(db.String(20), nullable=False, default='HELD')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -26,14 +27,15 @@ class Hold(db.Model):
             "checkInDate": self.check_in_date.isoformat() if self.check_in_date else None,
             "checkOutDate": self.check_out_date.isoformat() if self.check_out_date else None,
             "ttlSeconds": self.ttl_seconds,
-            "expiresAt": self.expires_at.isoformat() if self.expires_at else None,
+            "expiresAt": (self.expires_at.isoformat() + "Z") if self.expires_at else None,
             "reason": self.reason,
             "status": self.status,
-            "createdAt": self.created_at.isoformat() if self.created_at else None
+            "createdAt": (self.created_at.isoformat() + "Z") if self.created_at else None
         }
 
 class Reservation(db.Model):
     __tablename__ = 'reservation'
+    __table_args__ = {"schema": "availability_db"}
 
     reservation_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     listing_id = db.Column(db.String(36), nullable=False)

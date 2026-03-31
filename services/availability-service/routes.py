@@ -21,6 +21,17 @@ def health():
 def check_availability(listing_id, check_in_date, check_out_date):
     now = datetime.utcnow()
     
+    # 0. Clean up any expired holds to allow others to book immediately
+    try:
+        Hold.query.filter(
+            Hold.expires_at <= now,
+            Hold.status == 'HELD'
+        ).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Hold cleanup failed: {e}", flush=True)
+
     # 1. Check hold table
     active_holds = Hold.query.filter(
         Hold.listing_id == listing_id,
@@ -46,6 +57,7 @@ def check_availability(listing_id, check_in_date, check_out_date):
     return True
 
 @main.route('/availability', methods=['GET'])
+@main.route('/availability/', methods=['GET'])
 @main.route('/', methods=['GET'])
 def get_availability():
     listing_id = request.args.get('listingId')
@@ -69,7 +81,10 @@ def get_availability():
         "message": "success"
     }), 200
 
+@main.route('/availability/holds', methods=['POST'])
+@main.route('/availability/hold', methods=['POST'])
 @main.route('/holds', methods=['POST'])
+@main.route('/hold', methods=['POST'])
 def create_hold():
     data = request.json or {}
     listing_id = data.get('listingId')
@@ -185,6 +200,7 @@ def confirm_hold(hold_id):
         "message": "success"
     }), 200
 
+@main.route('/availability/holds/<string:hold_id>', methods=['DELETE'])
 @main.route('/holds/<string:hold_id>', methods=['DELETE'])
 def delete_hold(hold_id):
     hold = Hold.query.get(hold_id)

@@ -50,7 +50,7 @@ def run_cycle(engine):
 
         # Cycle 2 — host response timeouts (PENDING_HOST past due)
         result = conn.execute(text(
-            "SELECT booking_id FROM booking "
+            "SELECT booking_id FROM booking_db.booking "
             "WHERE status='PENDING_HOST' "
             "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
@@ -62,6 +62,20 @@ def run_cycle(engine):
                 print(f"[EXPIRER] Expired {bid}: {r.status_code}", flush=True)
             except Exception as e:
                 print(f"[EXPIRER] Error for {bid}: {e}", flush=True)
+
+        # Cycle 3 — soft hold cleanup (availability_db.hold past due)
+        try:
+            res = conn.execute(text(
+                "DELETE FROM availability_db.hold "
+                "WHERE expires_at < CURRENT_TIMESTAMP "
+                "AND status IN ('HELD', 'PENDING_HOST')"
+            ))
+            if res.rowcount > 0:
+                print(f"[EXPIRER] Cleaned up {res.rowcount} expired availability holds", flush=True)
+        except Exception as e:
+            print(f"[EXPIRER] Error cleaning availability holds: {e}", flush=True)
+
+        conn.commit()
 
 
 if __name__ == "__main__":

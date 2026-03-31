@@ -16,6 +16,68 @@ def health():
         "message": "success"}), 200
 
 
+@bp.route('/request-hold', methods=['POST'])
+@bp.route('/bookings/request-hold', methods=['POST'])
+def request_hold():
+    body = request.get_json() or {}
+    listingId = body.get('listingId')
+    guestId = body.get('guestId', 'anonymous')  # Default to anonymous if not provided
+    checkInDate = body.get('checkInDate')
+    checkOutDate = body.get('checkOutDate')
+
+    if not all([listingId, checkInDate, checkOutDate]):
+        return jsonify({"code": 400, "data": None, "message": "Missing required fields"}), 400
+
+    # Step 2 — Check with Listing service if listing is active
+    listing_status_code, listing_data = call_service("get", f"{LISTINGS_SERVICE_URL}/listings/{listingId}")
+    if listing_status_code != 200:
+        return jsonify({
+            "code": listing_status_code,
+            "data": None,
+            "message": listing_data.get("message", "Listing is not active or not found")
+        }), listing_status_code
+
+    # Step 3 — Get status from Availability service to ensure no holds/reservations
+    avail_status_code, avail_data = call_service("get", 
+        f"{AVAILABILITY_SERVICE_URL}/availability?listingId={listingId}&checkInDate={checkInDate}&checkOutDate={checkOutDate}")
+    
+    if avail_status_code != 200 or not avail_data.get("data", {}).get("available"):
+        return jsonify({
+            "code": 200,
+            "data": {"available": False},
+            "message": "Dates are already held or reserved"
+        }), 200
+
+    # Step 4 — Create a 60-second soft hold (1 minute)
+    hold_status_code, hold_data_res = call_service("post",
+        f"{AVAILABILITY_SERVICE_URL}/holds",
+        {
+            "listingId": listingId,
+            "guestId": guestId,
+            "checkInDate": checkInDate,
+            "checkOutDate": checkOutDate,
+            "ttlSeconds": 60,
+            "reason": "SOFT_HOLD_CLICK"
+        })
+
+    if hold_status_code == 201:
+        hold_data = hold_data_res["data"]
+        return jsonify({
+            "code": 200,
+            "data": {
+                "available": True,
+                "holdId": hold_data["holdId"],
+                "expireAt": hold_data["expiresAt"],
+                "status": "Held"
+            },
+            "message": "success"
+        }), 200
+    else:
+        # If hold fails for some reason (maybe someone grabbed it in between)
+        error_msg = hold_data_res.get("message", "Error communicating with availability service") if isinstance(hold_data_res, dict) else "Error"
+        return jsonify({"code": 500, "data": None, "message": error_msg}), 500
+
+
 @bp.route('/initiate', methods=['POST'])
 @bp.route('/bookings/initiate', methods=['POST'])
 def initiate_booking():

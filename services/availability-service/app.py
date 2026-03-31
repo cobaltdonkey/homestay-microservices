@@ -13,10 +13,10 @@ def create_app():
     if not database_url:
         raise ValueError("DATABASE_URL is not set")
 
-    # Add SSL for Supabase
-    if "sslmode" not in database_url:
+    # Ensure search_path is set to the availability_db schema
+    if "options=-csearch_path" not in database_url:
         separator = "&" if "?" in database_url else "?"
-        database_url = f"{database_url}{separator}sslmode=require"
+        database_url = f"{database_url}{separator}options=-csearch_path%3Davailability_db"
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
