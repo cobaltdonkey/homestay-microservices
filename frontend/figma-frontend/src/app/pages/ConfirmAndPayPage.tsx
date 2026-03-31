@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
-import { ArrowLeft, Star, Clock, CreditCard, CheckCircle, Lock, Wallet } from 'lucide-react';
+import { ArrowLeft, Star, Clock, CreditCard, Lock } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const stripePromise = loadStripe((import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 // Demo wallet stored in sessionStorage so it persists across pages but resets on new tab/session
 const WALLET_KEY = 'secondhome_demo_wallet';
@@ -16,7 +20,7 @@ function setWalletBalance(amount: number) {
   sessionStorage.setItem(WALLET_KEY, amount.toFixed(2));
 }
 
-export function ConfirmAndPayPage() {
+function ConfirmAndPayPageInner() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -33,12 +37,12 @@ export function ConfirmAndPayPage() {
   });
   const holdId = routeState.holdId || null;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [walletBalance, setWalletBalanceState] = useState<number>(getWalletBalance());
-  const [paymentReady, setPaymentReady] = useState(false); // user clicked "Use Demo Wallet"
+  const stripe = useStripe();
+  const elements = useElements();
   const hasRedirected = useRef(false);
 
-  // Card is valid when wallet is used
-  const isCardValid = paymentReady;
+  // Card is valid if stripe is loaded
+  const isCardValid = !!stripe;
 
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
@@ -107,34 +111,48 @@ export function ConfirmAndPayPage() {
   }, [navigate, holdId]);
 
   const handleConfirm = async () => {
-    if (isSubmitting) return;
-    if (walletBalance < total) {
-      alert('Insufficient wallet balance to complete this booking.');
-      return;
-    }
+    if (isSubmitting || !stripe || !elements) return;
     setIsSubmitting(true);
     try {
-      // Deduct from wallet immediately
-      const newBalance = walletBalance - total;
-      setWalletBalance(newBalance);
-      setWalletBalanceState(newBalance);
+      // Step 1: Stripe Tokenization (Demo Mode)
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) throw new Error("Card element not found");
 
-      // Step 1: Simulate gateway charge
+      const { error, paymentMethod } = await stripe.createPaymentMethod({
+        type: 'card',
+        card: cardElement,
+      });
+
+      if (error) {
+        alert(error.message);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      const realPaymentMethodId = paymentMethod.id;
+
+      // Step 2: Real gateway charge via Stripe API demo
       const gatewayRes = await fetch('/gateway/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: total,
           currency: 'SGD',
-          paymentMethodId: 'pm_demo_wallet',
+          paymentMethodId: realPaymentMethodId,
           bookingId: `demo-${Date.now()}`,
           idempotencyKey: `pay-${Date.now()}`,
           description: `Booking for listing ${id}`,
         }),
       });
       const gatewayJson = await gatewayRes.json();
-      const paymentTxnId = gatewayJson.data?.paymentTxnId ?? gatewayJson.data?.transactionId ?? 'txn_demo';
-      const paymentMethodId = 'pm_demo_wallet';
+      if (gatewayJson.code !== 200) {
+        alert(gatewayJson.message || 'Payment gateway declined the charge.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      const paymentTxnId = gatewayJson.data?.paymentTxnId || 'txn_demo';
+      const paymentMethodId = realPaymentMethodId;
 
       // Step 2: Create booking (POST /bookings)
       const bookingRes = await fetch('/bookings', {
@@ -251,90 +269,34 @@ export function ConfirmAndPayPage() {
               </div>
             </div>
 
-            {/* Section 2: Payment — Demo Stripe Wallet */}
+            {/* Section 2: Payment — Stripe Element */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Payment method</h2>
-
-              {/* Wallet balance card */}
-              <div className="border-2 border-[#EBEBEB] rounded-xl overflow-hidden">
-                {/* Stripe-branded header */}
-                <div className="bg-gradient-to-r from-[#635BFF] to-[#8B83FF] px-6 py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                      <Wallet className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-white/80 text-xs font-medium">Demo Wallet — Powered by</p>
-                      <p className="text-white font-bold text-sm">stripe</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 text-white/80 text-xs">
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card via Stripe API (Demo)</h2>
+              <div className="border border-[#EBEBEB] rounded-xl overflow-hidden bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-4 text-[#717171]">
+                  <CreditCard className="w-5 h-5" />
+                  <span className="text-sm font-semibold">Credit or Debit Card</span>
+                  <div className="ml-auto flex items-center gap-1 text-xs">
                     <Lock className="w-3 h-3" />
-                    Test mode
+                    Test Demo API
                   </div>
                 </div>
-
-                {/* Balance display */}
-                <div className="px-6 py-5 bg-white">
-                  <p className="text-sm text-[#717171] mb-1">Available Balance</p>
-                  <p className={`text-3xl font-bold mb-4 ${
-                    walletBalance >= total ? 'text-[#222222]' : 'text-[#FF385C]'
-                  }`}>
-                    SGD {walletBalance.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-
-                  {total > 0 && (
-                    <div className="bg-[#F7F7F7] rounded-lg p-3 mb-4 text-sm">
-                      <div className="flex justify-between text-[#717171] mb-1">
-                        <span>This booking</span>
-                        <span className="font-semibold text-[#222222]">− SGD {total.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-[#717171]">
-                        <span>Balance after</span>
-                        <span className={`font-semibold ${
-                          walletBalance - total >= 0 ? 'text-[#008A05]' : 'text-[#FF385C]'
-                        }`}>
-                          SGD {Math.max(0, walletBalance - total).toLocaleString('en-SG', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Demo test card info */}
-                  <div className="border border-[#EBEBEB] rounded-lg p-3 mb-4 flex items-center gap-3">
-                    <CreditCard className="w-5 h-5 text-[#635BFF] flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-[#222222]">Demo Card on File</p>
-                      <p className="text-xs text-[#717171]">Visa •••• 4242 | Exp 12/30</p>
-                    </div>
-                    <div className="ml-auto">
-                      <CheckCircle className="w-4 h-4 text-[#008A05]" />
-                    </div>
-                  </div>
-
-                  {!paymentReady ? (
-                    <button
-                      onClick={() => setPaymentReady(true)}
-                      disabled={walletBalance < total}
-                      className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
-                        walletBalance >= total
-                          ? 'bg-[#635BFF] hover:bg-[#5144E8] text-white'
-                          : 'bg-[#EBEBEB] text-[#717171] cursor-not-allowed'
-                      }`}
-                    >
-                      <Wallet className="w-4 h-4" />
-                      {walletBalance >= total ? 'Use Demo Wallet to Pay' : 'Insufficient Balance'}
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 bg-[#F0FFF4] border border-[#008A05]/30 rounded-lg px-4 py-3">
-                      <CheckCircle className="w-5 h-5 text-[#008A05]" />
-                      <span className="text-sm font-semibold text-[#008A05]">Wallet selected — ready to pay</span>
-                      <button
-                        onClick={() => setPaymentReady(false)}
-                        className="ml-auto text-xs text-[#717171] hover:underline"
-                      >Change</button>
-                    </div>
-                  )}
+                
+                <div className="p-4 border border-[#EBEBEB] rounded-lg bg-[#F7F7F7]">
+                  <CardElement options={{
+                    style: {
+                      base: {
+                        fontSize: '16px',
+                        color: '#222222',
+                        '::placeholder': {
+                          color: '#aab7c4',
+                        },
+                      },
+                      invalid: {
+                        color: '#FF385C',
+                      },
+                    },
+                  }} />
                 </div>
               </div>
             </div>
@@ -440,5 +402,13 @@ export function ConfirmAndPayPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function ConfirmAndPayPage() {
+  return (
+    <Elements stripe={stripePromise}>
+      <ConfirmAndPayPageInner />
+    </Elements>
   );
 }
