@@ -14,16 +14,16 @@ export function AuthoriseAndRequestPage() {
   const [cardName, setCardName] = useState('');
   const routeState = location.state as any || {};
   const [timeLeft, setTimeLeft] = useState(() => {
-    if (routeState.expireAt) {
+    if (routeState.expireAt && routeState.holdId) {
       const expiry = new Date(routeState.expireAt).getTime();
       const now = new Date().getTime();
       const diff = Math.floor((expiry - now) / 1000);
       console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
-      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
+      return diff;
     }
-    return 60;
+    return 0; // Boot back if missing
   });
-  const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
+  const holdId = routeState.holdId || null;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Booking context from router state
@@ -62,34 +62,7 @@ export function AuthoriseAndRequestPage() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
-  // POST /availability/hold on mount
-  useEffect(() => {
-    if (!id || !checkIn || !checkOut || holdId) return;
-    const createHold = async () => {
-      try {
-        const res = await fetch('/availability/hold', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            listingId: id,
-            guestId,
-            checkInDate: checkIn,
-            checkOutDate: checkOut,
-            ttlSeconds: 60,
-          }),
-        });
-        const json = await res.json();
-        if (json.code === 201) {
-          setHoldId(json.data?.holdId ?? null);
-          setTimeLeft(15);
-        }
-      } catch (err) {
-        console.error('Hold failed:', err);
-      }
-    };
-    createHold();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   // Countdown timer
   useEffect(() => {

@@ -20,9 +20,18 @@ export function ConfirmAndPayPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
+  const routeState = location.state as any || {};
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [timeLeft, setTimeLeft] = useState(45); // 45-second soft hold
-  const [holdId, setHoldId] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (routeState.expireAt && routeState.holdId) {
+      const expiry = new Date(routeState.expireAt).getTime();
+      const now = new Date().getTime();
+      const diff = Math.floor((expiry - now) / 1000);
+      return diff;
+    }
+    return 0;
+  });
+  const holdId = routeState.holdId || null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [walletBalance, setWalletBalanceState] = useState<number>(getWalletBalance());
   const [paymentReady, setPaymentReady] = useState(false); // user clicked "Use Demo Wallet"
@@ -31,8 +40,6 @@ export function ConfirmAndPayPage() {
   // Card is valid when wallet is used
   const isCardValid = paymentReady;
 
-  // Read booking context from router state
-  const routeState = location.state as any || {};
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
@@ -70,34 +77,7 @@ export function ConfirmAndPayPage() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
-  // POST /availability/hold on mount
-  useEffect(() => {
-    if (!id || !checkIn || !checkOut || holdId) return;
-    const createHold = async () => {
-      try {
-        const res = await fetch('/availability/hold', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            listingId: id,
-            guestId,
-            checkInDate: checkIn,
-            checkOutDate: checkOut,
-            ttlSeconds: 60,
-          }),
-        });
-        const json = await res.json();
-        if (json.code === 201) {
-          setHoldId(json.data?.holdId ?? null);
-          setTimeLeft(15);
-        }
-      } catch (err) {
-        console.error('Hold failed:', err);
-      }
-    };
-    createHold();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   // Countdown timer
   useEffect(() => {
