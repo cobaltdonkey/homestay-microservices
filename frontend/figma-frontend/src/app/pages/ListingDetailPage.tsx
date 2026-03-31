@@ -81,9 +81,10 @@ export function ListingDetailPage() {
         if (res.ok) {
           const json = await res.json();
           if (json.code === 200 && Array.isArray(json.data)) {
+            console.log(`[DEBUG] Fetched ${json.data.length} booked ranges for listing ${id}`);
             const ranges = json.data.map((r: any) => ({
-              start: new Date(r.checkInDate),
-              end: new Date(r.checkOutDate),
+              start: new Date(r.checkInDate + 'T00:00:00'),
+              end: new Date(r.checkOutDate + 'T00:00:00'),
             }));
             setBlockedRanges(ranges);
           }

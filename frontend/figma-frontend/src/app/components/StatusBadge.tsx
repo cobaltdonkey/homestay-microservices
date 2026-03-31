@@ -6,6 +6,7 @@ export type BookingStatus =
   | 'REJECTED'
   | 'EXPIRED'
   | 'FAILED_PAYMENT'
+  | 'CANCELLED'
   | 'COMPLETED';
 
 interface StatusBadgeProps {
@@ -40,6 +41,10 @@ const statusConfig = {
   FAILED_PAYMENT: {
     label: 'Failed Payment',
     className: 'bg-white border-2 border-[#C13515] text-[#C13515]',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    className: 'bg-white border border-[#717171] text-[#717171]',
   },
   COMPLETED: {
     label: 'Completed',

@@ -15,6 +15,7 @@ interface Booking {
   status: BookingStatus;
   guests: number;
   total: number;
+  createdAt: string;
   timeRemaining?: { hours: number; minutes: number; seconds: number };
 }
 
@@ -54,6 +55,7 @@ export function MyTripsPage() {
             status: ((b.status ?? 'CONFIRMED').toUpperCase()) as BookingStatus,
             guests: b.guests ?? 1,
             total: Number(b.totalAmount ?? 0),
+            createdAt: b.createdAt
           }));
           setBookings(mapped);
         }

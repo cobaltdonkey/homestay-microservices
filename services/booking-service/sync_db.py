@@ -1,23 +1,21 @@
+import os
+from flask import Flask
+from db import db
 from sqlalchemy import text
+from app import create_app
 
 app = create_app()
+
 with app.app_context():
-    print("Syncing database schema (adding columns if missing)...")
+    print("Syncing booking database schema...")
     
-    # Raw SQL checks for Postgres (ALTER TABLE ADD COLUMN IF NOT EXISTS)
-    alter_queries = [
-        "ALTER TABLE booking ADD COLUMN IF NOT EXISTS listing_title VARCHAR(255)",
-        "ALTER TABLE booking ADD COLUMN IF NOT EXISTS listing_image TEXT",
-        "ALTER TABLE booking ADD COLUMN IF NOT EXISTS total_amount NUMERIC(10, 2)",
-        "ALTER TABLE booking ADD COLUMN IF NOT EXISTS guests INTEGER"
-    ]
-    
-    for query in alter_queries:
-        try:
-            db.session.execute(text(query))
-            print(f"Executed: {query}")
-        except Exception as e:
-            print(f"Error executing {query}: {e}")
-            
+    # Ensure the schema exists
+    db.session.execute(text("CREATE SCHEMA IF NOT EXISTS booking"))
     db.session.commit()
-    print("Database sync complete.")
+    
+    # Create tables defined in models.py
+    # Since we set __table_args__ = {'schema': 'booking'}, 
+    # db.create_all() will create them in the booking schema.
+    db.create_all()
+    
+    print("Database sync complete. Tables created in 'booking' schema.")

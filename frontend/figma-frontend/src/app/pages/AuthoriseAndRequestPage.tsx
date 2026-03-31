@@ -35,8 +35,9 @@ export function AuthoriseAndRequestPage() {
     deposit: 200,
   };
 
-  const checkIn: string = routeState.checkIn ?? '';
-  const checkOut: string = routeState.checkOut ?? '';
+  // Format dates to YYYY-MM-DD for the backend
+  const checkIn: string = routeState.checkIn ? new Date(routeState.checkIn).toISOString().split('T')[0] : '';
+  const checkOut: string = routeState.checkOut ? new Date(routeState.checkOut).toISOString().split('T')[0] : '';
   const total = routeState.price * (routeState.nights || 1) + listing.cleaningFee + listing.deposit;
   const splitAmount = total / 2;
 
