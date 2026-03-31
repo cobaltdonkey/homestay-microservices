@@ -8,8 +8,48 @@ IS213 Enterprise Solution Development — SMU.
 ## Prerequisites
 
 - Docker Desktop (running)
-- Python 3.11 with requests library (`pip install requests`)
-- Ports free: `8000`, `5672`, `15672`
+- Node.js 18+ and npm (for the frontend)
+- Ports free: `8000`, `8001`, `5672`, `15672`
+
+---
+
+## Environment Setup
+
+All backend configuration lives in the root `.env` file. The frontend reads its own `frontend/figma-frontend/.env`.
+
+### 1. Root `.env` (backend + workers)
+
+The `.env` file is pre-filled with a shared Supabase project for demo use. To point to your own Supabase project, update the following fields:
+
+```env
+SUPABASE_PROJECT_REF=<your-project-ref>
+SUPABASE_DB_HOST=<your-pooler-host>
+SUPABASE_DB_PASSWORD=<your-db-password>
+```
+
+All `*_DB_URL` variables below are derived from these values. You do not need to edit them individually unless you have a custom setup.
+
+Key toggles:
+
+| Variable | Default | Description |
+|---|---|---|
+| `STRIPE_DEMO_MODE` | `false` | Set to `true` to skip live Stripe calls |
+| `TWILIO_DEMO_MODE` | `false` | Set to `true` to print SMS to Docker logs instead |
+
+### 2. Frontend `.env`
+
+```bash
+cp frontend/figma-frontend/.env.example frontend/figma-frontend/.env
+```
+
+The example file is pre-filled with the demo Supabase project's public anon key. Update `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` if using your own project.
+
+### 3. Supabase database initialisation
+
+If using a fresh Supabase project, run the SQL script to create all tables:
+
+1. Open your Supabase project → **SQL Editor**
+2. Paste and run `infra/init-db/supabase_init.sql`
 
 ---
 
@@ -21,20 +61,19 @@ cd <repo>
 docker compose up --build
 ```
 
-Wait until all containers show as healthy — approximately 2 minutes.
+Wait until all containers are healthy — approximately 2–3 minutes. Kong and RabbitMQ will be the last to become ready.
 
-Seed the database with verified demo data (listings, users, check-ins):
+### Seed demo data
 
 ```bash
-# Option A: Run from your host machine (requires python + requests)
+# Option A: from your host machine
 python infra/seed_supabase.py
 
-# Option B: Run from within the Docker container (no host dependencies)
+# Option B: from inside a running container (no local Python needed)
 docker exec homestay-microservices-listings-service-1 python /app/infra/seed_supabase.py
 ```
 
-Run the unified React frontend for both guest and host workflows:
-
+### Start the frontend
 
 ```bash
 cd frontend/figma-frontend
@@ -42,31 +81,42 @@ npm install
 npm run dev
 ```
 
-<<<<<<< HEAD
-Then open the Vite app URL shown in your terminal (defaults to `http://localhost:5173`). Use `/` for the guest experience, `/my-trips` for booking lookup/history, and `/host/dashboard` for the host workspace.
+Open the URL shown in your terminal (defaults to `http://localhost:5173`).
 
----
-
-## Supabase Migration (New)
-
-The project has been migrated to Supabase. Please follow these steps:
-
-1. Create a project at [Supabase](https://supabase.com).
-2. Run the SQL script found in `infra/init-db/supabase_init.sql` (includes table creation and permissions).
-3. Update `frontend/figma-frontend/.env` with your Supabase URL and Anon Key.
-=======
-Then open the Vite app URL shown in your terminal (defaults to `http://localhost:5173`). The app provides a integrated experience for both guests (landing page, search, bookings) and hosts (dashboard hub).
->>>>>>> origin/fix/supabase-link
+The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/availability`, `/bookings`, `/gateway`, `/stays`, `/notifications`) to Kong on port 8000 — no extra configuration needed.
 
 ---
 
 ## Demo Credentials
 
-The platform is pre-seeded with the following test account:
+| Field | Value |
+|---|---|
+| Email | `alice2@demo.com` |
+| Password | `password123` |
+| Role | Guest |
 
-- **Email**: `alice2@demo.com`
-- **Password**: `password123`
-- **Role**: `guest`
+---
+
+## Frontend Routes
+
+| Route | Description |
+|---|---|
+| `/` | Landing page — browse and search listings |
+| `/search` | Search results |
+| `/listing/:id` | Listing detail + date selection |
+| `/booking/confirm-and-pay/:id` | Instant booking checkout |
+| `/booking/confirmed/:id` | Booking confirmation |
+| `/booking/authorise-and-request/:id` | Request-to-book checkout |
+| `/booking/request-sent/:id` | Request submitted confirmation |
+| `/booking/declined` | Booking rejected page |
+| `/booking/expired` | Booking expired page |
+| `/my-trips` | Guest — booking history |
+| `/host/dashboard` | Host — approve/reject pending bookings, submit inspections |
+| `/host/active-stays` | Host — current active stays |
+| `/host/active-listings` | Host — manage listings |
+| `/host/upcoming-guests` | Host — confirmed upcoming bookings |
+| `/host/rejected-bookings` | Host — rejected booking history |
+| `/host/past-stays` | Host — completed stays |
 
 ---
 
@@ -74,35 +124,34 @@ The platform is pre-seeded with the following test account:
 
 ### Scenario 1.1 — Instant Booking
 
-1. Open the React app at `/`
-2. Search for `Singapore` and choose the Orchard Road listing card
+1. Open `/`
+2. Search for `Singapore` and choose the **Orchard Road** listing card
 3. Select check-in and check-out dates from the listing detail page
 4. Click **Check availability** → should show green success text
 5. Continue through guest info + payment
 6. Submit the booking → confirmation page shows `CONFIRMED`
-7. Check Docker logs for `[DEMO SMS]` confirmation messages
+7. Check Docker logs for `[DEMO SMS]` confirmation messages (if `TWILIO_DEMO_MODE=true`)
 
 ### Scenario 1.2 — Request Booking + Host Approve
 
-1. Guest: same flow but choose the Marina Bay request-booking listing → confirmation shows `PENDING_HOST`
-2. Copy the Booking ID
-3. Open the React app at `/host/dashboard`, paste Booking ID, click **Load booking**
+1. Guest: same flow but choose the **Marina Bay** listing → confirmation shows `PENDING_HOST`
+2. Copy the Booking ID shown on the confirmation page
+3. Open `/host/dashboard`, paste the Booking ID, click **Load booking**
 4. Click **✓ Approve** → status changes to `CONFIRMED`
 
 ### Scenario 2.2 — Host Reject
 
-1. Same as 1.2 up to step 3
+1. Follow Scenario 1.2 up to step 3
 2. Click **✗ Reject** instead of Approve
-3. Docker logs show `[DEMO SMS]` with alternative listings
+3. Docker logs show `[DEMO SMS]` with alternative listing suggestions
 
 ### Scenario 3.1.1 — Post-Stay Inspection (Good)
 
-1. Find a `stayId` (from booking logs or `stay_db`)
-2. Open the React app at `/host/dashboard` and use the **Submit inspection** section
-3. Enter stayId, select **GOOD**, add notes
-4. Click **Submit Inspection**
-5. Result shows `action=RELEASE`
-6. Docker logs show `[DEMO SMS]` deposit released
+1. Find a `stayId` from booking logs or the `stays` table in Supabase
+2. Open `/host/dashboard` and use the **Submit inspection** section
+3. Enter the `stayId`, select **GOOD**, add notes
+4. Click **Submit Inspection** → result shows `action=RELEASE`
+5. Docker logs show `[DEMO SMS]` deposit released
 
 ### Scenario 3.1.2 — Post-Stay Inspection (Bad)
 
@@ -112,81 +161,57 @@ The platform is pre-seeded with the following test account:
 
 ### Scenario 3.2 — Auto-Release (48h no report)
 
-1. Set deposit-expirer sleep to 30s for testing:
-   change `time.sleep(300)` to `time.sleep(30)` in `workers/deposit-expirer/expirer.py`
-2. Manually set a stay's `checkout_time` to 49 hours ago in PostgreSQL
+1. For testing, change `time.sleep(300)` → `time.sleep(30)` in `workers/deposit-expirer/expirer.py`
+2. In Supabase, manually set a stay's `checkout_time` to 49 hours ago
 3. Wait one expirer cycle
 4. Docker logs show `[DEP-EXPIRER] Auto-release` triggered
 
 ---
 
-## Switching to Live Mode (Final Demo Only)
+## Architecture
 
-API configuration is handled via the `.env` file in the root directory.
+The platform follows a **Microservices Architecture** backed by a **Shared Supabase PostgreSQL** database and **Event-Driven Notifications** via RabbitMQ.
 
-To use your own keys, update `.env`:
-- `STRIPE_SECRET_KEY`: Your Stripe secret key
-- `STRIPE_DEMO_MODE`: Set to `false` for live calls
-- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`: Your Twilio credentials
-- `TWILIO_DEMO_MODE`: Set to `false` for live SMS
+- **Kong Gateway** (port 8000): Routes all inbound API requests, handles CORS and internal DNS resolution.
+- **Atomic Services**: `users`, `listings`, `availability`, `stay`, `inspection`, `payment-logs`, `listings-search` — each owns a set of domain tables.
+- **Composite Services**: `booking-service` orchestrates multi-service booking flows; `deposit-resolution` resolves deposit capture/release.
+- **Wrapper Services**: `payment-gateway-wrapper` (Stripe), `notification-gateway` (Twilio/SMS).
+- **Workers**: `booking-expirer` expires stale pending requests; `deposit-expirer` auto-releases deposits after 48 h with no inspection report.
+- **Communication**: Synchronous REST for queries; asynchronous RabbitMQ topics for side effects (SMS notifications).
 
-Then restart the stack:
+See `infra/kong.yml` for the full routing configuration.
 
-```bash
-docker compose up -d
-```
+---
+
+## Service Registry
+
+| Service | Internal Port | Database |
+|---|---|---|
+| booking-service | 5001 | Supabase `postgres` |
+| deposit-resolution | 5002 | Supabase `postgres` |
+| users-service | 5003 | Supabase `postgres` |
+| listings-service | 5004 | Supabase `postgres` |
+| availability-service | 5005 | Supabase `postgres` |
+| stay-service | 5006 | Supabase `postgres` |
+| inspection-service | 5007 | Supabase `postgres` |
+| payment-logs-service | 5008 | Supabase `postgres` |
+| listings-search-service | 5009 | Supabase `postgres` |
+| payment-gateway-wrapper | 5010 | — |
+| notification-gateway | 5011 | Supabase `postgres` |
+| Kong (proxy) | 8000 | — |
+| Kong (admin) | 8001 | — |
+| RabbitMQ (AMQP) | 5672 | — |
+| RabbitMQ (management UI) | 15672 | — |
 
 ---
 
 ## Troubleshooting
 
 | Symptom | Fix |
-|-------|----------|
+|---|---|
 | Container exits immediately | `docker compose logs <service-name>` |
-| Port 8000 refused | Kong takes ~30s after MySQL/RabbitMQ are ready — wait and retry |
-| Table doesn't exist | `docker compose down -v && docker compose up --build` |
-| RabbitMQ consumer not receiving | Check `rabbitmq-setup` container exited with code 0. If not: `docker compose restart rabbitmq-setup` |
-
----
-
-## Architecture
-
-The platform follows a **Microservices Architecture** with a **Shared Database (Supabase PostgreSQL)** and **Event-Driven Notifications (RabbitMQ)**.
-
-- **Kong Gateway**: Handles all incoming API requests (Port 8000), routing to internal services and managing CORS/DNS.
-- **Atomic Services**: `users`, `listings`, `stay`, etc. manage individual business domains.
-- **Composite Services**: `booking-service` orchestrates complex flows across multiple atomic services.
-- **Workers**: `booking-expirer` and `deposit-expirer` handle time-based events (e.g., releasing deposits after 48h).
-- **Communication**: Services use synchronous REST for queries and asynchronous RabbitMQ topics for side effects (SMS).
-
-See `/docs/api-contracts.md` for all endpoint schemas.
-See `/docs/event-schemas.md` for all AMQP event payloads.
-
----
-
-## Service Registry
-
-| Service | Port | Database (Supabase) |
-|---------|------|---------------------|
-| booking-service | 5001 | Shared `postgres` |
-| deposit-resolution | 5002 | Shared `postgres` |
-| users-service | 5003 | Shared `postgres` |
-| listings-service | 5004 | Shared `postgres` |
-| availability-service | 5005 | Shared `postgres` |
-| stay-service | 5006 | Shared `postgres` |
-| inspection-service | 5007 | Shared `postgres` |
-| payment-logs-service | 5008 | Shared `postgres` |
-| listings-search-service | 5009 | Shared `postgres` |
-| payment-gateway-wrapper | 5010 | — |
-<<<<<<< HEAD
-| notification-gateway | 5011 | notification_db |
-| Kong (proxy) | 8000 | — |
-| Kong (admin) | 8001 | — |
-| RabbitMQ (AMQP) | 5672 | — |
-| RabbitMQ (management UI) | 15672 | — |
-=======
-| notification-gateway | 5011 | Shared `postgres` |
-| Kong (API Gateway) | 8000 | — |
-| RabbitMQ (Events) | 5672 | — |
-
->>>>>>> origin/fix/supabase-link
+| Port 8000 refused | Kong takes ~30 s after RabbitMQ is ready — wait and retry |
+| Table doesn't exist | `docker compose down -v && docker compose up --build`, then re-run the seed script |
+| RabbitMQ consumer not receiving | Check that `rabbitmq-setup` exited with code 0; if not: `docker compose restart rabbitmq-setup` |
+| Supabase connection refused | Confirm `SUPABASE_DB_PASSWORD` in `.env` is correct and the project is not paused |
+| Frontend shows no listings | Ensure the seed script has run and Kong is healthy; check browser console for proxy errors |
