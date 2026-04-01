@@ -7,23 +7,11 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 
 const stripePromise = loadStripe((import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY);
 
-// Demo wallet stored in sessionStorage so it persists across pages but resets on new tab/session
-const WALLET_KEY = 'secondhome_demo_wallet';
-const INITIAL_BALANCE = 5000;
-
-function getWalletBalance(): number {
-  const stored = sessionStorage.getItem(WALLET_KEY);
-  return stored ? parseFloat(stored) : INITIAL_BALANCE;
-}
-
-function setWalletBalance(amount: number) {
-  sessionStorage.setItem(WALLET_KEY, amount.toFixed(2));
-}
-
 function ConfirmAndPayPageInner() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
+  const routeState = location.state as any || {};
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
   const [timeLeft, setTimeLeft] = useState(60); // 60-second soft hold
   const [holdId, setHoldId] = useState<string | null>(null);
@@ -35,8 +23,6 @@ function ConfirmAndPayPageInner() {
   // Card is valid if stripe is loaded
   const isCardValid = !!stripe;
 
-  // Read booking context from router state
-  const routeState = location.state as any || {};
   const storedUser = localStorage.getItem('secondhome_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
@@ -136,47 +122,53 @@ function ConfirmAndPayPageInner() {
     if (isSubmitting || !stripe || !elements) return;
     setIsSubmitting(true);
     try {
-      // Step 1: Stripe Tokenization (Demo Mode)
       const cardElement = elements.getElement(CardElement);
       if (!cardElement) throw new Error("Card element not found");
 
-      const { error, paymentMethod } = await stripe.createPaymentMethod({
-        type: 'card',
-        card: cardElement,
-      });
-
-      if (error) {
-        alert(error.message);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      const realPaymentMethodId = paymentMethod.id;
-
-      // Step 2: Real gateway charge via Stripe API demo
-      const gatewayRes = await fetch('/gateway/charge', {
+      // Step 1: Create Payment Intent on Backend
+      const intentRes = await fetch('/gateway/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: total,
-          currency: 'SGD',
-          paymentMethodId: realPaymentMethodId,
-          bookingId: `demo-${Date.now()}`,
-          idempotencyKey: `pay-${Date.now()}`,
-          description: `Booking for listing ${id}`,
+          bookingId: `pi-bk-${Date.now()}`,
+          currency: 'sgd',
+          capture_method: 'automatic'
         }),
       });
-      const gatewayJson = await gatewayRes.json();
-      if (gatewayJson.code !== 200) {
-        alert(gatewayJson.message || 'Payment gateway declined the charge.');
+      const intentJson = await intentRes.json();
+      if (intentJson.code !== 200) {
+        alert(intentJson.message || 'Failed to initialize payment.');
         setIsSubmitting(false);
         return;
       }
-      
-      const paymentTxnId = gatewayJson.data?.paymentTxnId || 'txn_demo';
-      const paymentMethodId = realPaymentMethodId;
 
-      // Step 2: Create booking (POST /bookings)
+      const { clientSecret, paymentIntentId } = intentJson.data;
+
+      // Step 2: Confirm Payment on Client
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: currentUser?.name || 'Guest User',
+            email: currentUser?.email || '',
+          },
+        },
+      });
+
+      if (result.error) {
+        alert(result.error.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (result.paymentIntent.status !== 'succeeded') {
+        alert('Payment processing failed. Status: ' + result.paymentIntent.status);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Step 3: Create booking (POST /bookings)
       const bookingRes = await fetch('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,8 +178,7 @@ function ConfirmAndPayPageInner() {
           listingId: id,
           checkInDate: checkIn,
           checkOutDate: checkOut,
-          paymentMethodId,
-          paymentTxnId,
+          paymentIntentId: result.paymentIntent.id, // Pass the confirmed intent
           holdId,
           bookingMode: 'INSTANT',
           listingTitle: listing.title,
@@ -215,7 +206,7 @@ function ConfirmAndPayPageInner() {
       }
     } catch (err) {
       console.error('Booking failed:', err);
-      alert('Booking failed. Is the backend running?');
+      alert('Booking failed. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -293,14 +284,14 @@ function ConfirmAndPayPageInner() {
 
             {/* Section 2: Payment — Stripe Element */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card via Stripe API (Demo)</h2>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card</h2>
               <div className="border border-[#EBEBEB] rounded-xl overflow-hidden bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-4 text-[#717171]">
                   <CreditCard className="w-5 h-5" />
                   <span className="text-sm font-semibold">Credit or Debit Card</span>
                   <div className="ml-auto flex items-center gap-1 text-xs">
                     <Lock className="w-3 h-3" />
-                    Test Demo API
+                    Secure Sandbox
                   </div>
                 </div>
                 

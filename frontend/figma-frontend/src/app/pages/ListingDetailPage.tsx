@@ -130,7 +130,7 @@ export function ListingDetailPage() {
         checkOut, 
         guests, 
         holdId: pendingHold?.holdId, 
-        expireAt: pendingHold?.expireAt,
+        expireAt: pendingHold?.expiresAt || pendingHold?.expireAt,
         listingTitle: listing.propertyType,
         imageUrl: listing.imageUrl,
         price: listing.price,
@@ -212,8 +212,8 @@ export function ListingDetailPage() {
       const checkInStr = checkIn.toISOString().split('T')[0];
       const checkOutStr = checkOut.toISOString().split('T')[0];
       
-      // New flow: Communicate with Booking microservice to check availability and create a 15s soft hold
-      const res = await fetch('/bookings/request-hold', {
+      // New flow: Communicate with Availability microservice to create a 30s soft hold
+      const res = await fetch('/availability/hold', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,15 +223,16 @@ export function ListingDetailPage() {
           guestId: user?.userId || 'anonymous',
           checkInDate: checkInStr,
           checkOutDate: checkOutStr,
+          ttlSeconds: 30,
         }),
       });
       
       const json = await res.json();
       
-      if (json.code === 200 && json.data.available) {
-        console.log('Soft hold successfully created via Booking Service:', {
+      if (json.code === 201) {
+        console.log('Soft hold successfully created via Availability Service:', {
           holdId: json.data.holdId,
-          expireAt: json.data.expireAt,
+          expiresAt: json.data.expiresAt,
           status: json.data.status
         });
         return json.data;
@@ -256,6 +257,8 @@ export function ListingDetailPage() {
           checkIn, 
           checkOut, 
           guests,
+          holdId: holdData.holdId,
+          expireAt: holdData.expiresAt || holdData.expireAt,
           listingTitle: listing.propertyType,
           imageUrl: listing.imageUrl,
           price: listing.price,
@@ -281,6 +284,8 @@ export function ListingDetailPage() {
           checkIn, 
           checkOut, 
           guests,
+          holdId: holdData.holdId,
+          expireAt: holdData.expiresAt || holdData.expireAt,
           listingTitle: listing.propertyType,
           imageUrl: listing.imageUrl,
           price: listing.price,

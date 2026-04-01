@@ -13,6 +13,48 @@ if not DEMO_MODE:
 def demo_txn_id():
     return f"demo_pi_{uuid.uuid4().hex[:12]}"
 
+@main.route('/gateway/create-payment-intent', methods=['POST'])
+@main.route('/create-payment-intent', methods=['POST'])
+def create_payment_intent():
+    data = request.json or {}
+    amount = data.get('amount')
+    booking_id = data.get('bookingId')
+    currency = data.get('currency', 'sgd').lower()
+    capture_method = data.get('capture_method', 'automatic') # automatic or manual
+
+    if not all([amount, booking_id]):
+        return jsonify({"code": 400, "data": {}, "message": "Missing amount or bookingId"}), 400
+
+    if DEMO_MODE:
+        return jsonify({
+            "code": 200, 
+            "data": {
+                "clientSecret": f"demo_secret_{uuid.uuid4().hex}",
+                "paymentIntentId": demo_txn_id()
+            }, 
+            "message": "success (DEMO)"
+        }), 200
+
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),
+            currency=currency,
+            capture_method=capture_method,
+            metadata={"bookingId": booking_id},
+            automatic_payment_methods={"enabled": True},
+        )
+        return jsonify({
+            "code": 200,
+            "data": {
+                "clientSecret": intent.client_secret,
+                "paymentIntentId": intent.id
+            },
+            "message": "success"
+        }), 200
+    except stripe.error.StripeError as e:
+        return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
+
+
 @main.route('/health', methods=['GET'])
 def health():
     return jsonify({
@@ -29,31 +71,44 @@ def capture():
     booking_id = data.get('bookingId')
     amount = data.get('amount')
     payment_method_id = data.get('paymentMethodId')
+    payment_intent_id = data.get('paymentIntentId') # New: confirm an existing intent
     idempotency_key = data.get('idempotencyKey')
 
-    if not all([booking_id, amount, payment_method_id, idempotency_key]):
-        return jsonify({"code": 400, "data": {}, "message": "Missing required fields"}), 400
+    if not any([payment_method_id, payment_intent_id]):
+         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentIntentId"}), 400
 
     if DEMO_MODE:
         print(f"[DEMO] Stripe call simulated: capture booking={booking_id} amount={amount}", flush=True)
-        txn_id = demo_txn_id()
+        txn_id = payment_intent_id or demo_txn_id()
         return jsonify({"code": 200, "data": {
             "paymentTxnId": txn_id, "amount": amount, "status": "SUCCESS"
         }, "message": "success"}), 200
 
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),
-            currency="sgd",
-            payment_method=payment_method_id,
-            capture_method="automatic",
-            confirm=True,
-            metadata={"bookingId": booking_id},
-            idempotency_key=idempotency_key
-        )
-        return jsonify({"code": 200, "data": {
-            "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
-        }, "message": "success"}), 200
+        if payment_intent_id:
+            # If we already have a payment intent confirmed on client, we just retrieve/verify it
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            if intent.status == 'succeeded':
+                return jsonify({"code": 200, "data": {
+                    "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
+                }, "message": "success"}), 200
+            else:
+                return jsonify({"code": 402, "data": {}, "message": f"Payment status: {intent.status}"}), 402
+        else:
+            # Legacy flow: create and confirm on server
+            intent = stripe.PaymentIntent.create(
+                amount=int(float(amount) * 100),
+                currency="sgd",
+                payment_method=payment_method_id,
+                capture_method="automatic",
+                confirm=True,
+                metadata={"bookingId": booking_id},
+                idempotency_key=idempotency_key,
+                automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+            )
+            return jsonify({"code": 200, "data": {
+                "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
+            }, "message": "success"}), 200
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
@@ -65,31 +120,42 @@ def authorise():
     booking_id = data.get('bookingId')
     amount = data.get('amount')
     payment_method_id = data.get('paymentMethodId')
+    payment_intent_id = data.get('paymentIntentId')
     idempotency_key = data.get('idempotencyKey')
 
-    if not all([booking_id, amount, payment_method_id, idempotency_key]):
-        return jsonify({"code": 400, "data": {}, "message": "Missing required fields"}), 400
+    if not any([payment_method_id, payment_intent_id]):
+         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentIntentId"}), 400
 
     if DEMO_MODE:
         print(f"[DEMO] Stripe call simulated: authorise booking={booking_id} amount={amount}", flush=True)
-        txn_id = demo_txn_id()
+        txn_id = payment_intent_id or demo_txn_id()
         return jsonify({"code": 200, "data": {
             "paymentTxnId": txn_id, "amount": amount, "status": "AUTHORIZED"
         }, "message": "success"}), 200
 
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=int(float(amount) * 100),
-            currency="sgd",
-            payment_method=payment_method_id,
-            capture_method="manual",
-            confirm=True,
-            metadata={"bookingId": booking_id},
-            idempotency_key=idempotency_key
-        )
-        return jsonify({"code": 200, "data": {
-            "paymentTxnId": intent.id, "amount": amount, "status": "AUTHORIZED"
-        }, "message": "success"}), 200
+        if payment_intent_id:
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            if intent.status == 'requires_capture':
+                return jsonify({"code": 200, "data": {
+                    "paymentTxnId": intent.id, "amount": amount, "status": "AUTHORIZED"
+                }, "message": "success"}), 200
+            else:
+                return jsonify({"code": 402, "data": {}, "message": f"Payment status: {intent.status}"}), 402
+        else:
+            intent = stripe.PaymentIntent.create(
+                amount=int(float(amount) * 100),
+                currency="sgd",
+                payment_method=payment_method_id,
+                capture_method="manual",
+                confirm=True,
+                metadata={"bookingId": booking_id},
+                idempotency_key=idempotency_key,
+                automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+            )
+            return jsonify({"code": 200, "data": {
+                "paymentTxnId": intent.id, "amount": amount, "status": "AUTHORIZED"
+            }, "message": "success"}), 200
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
