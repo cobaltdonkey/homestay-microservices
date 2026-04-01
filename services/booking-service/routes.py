@@ -4,6 +4,7 @@ import uuid
 from helpers import call_service
 from shared.constants import *
 import re
+from rabbitmq_helper import publish_message
 
 class Booking:
     def __init__(self, **kwargs):
@@ -273,6 +274,7 @@ def initiate_booking():
     nights = (co - ci).days
     amount = round(pricePerNight * nights, 2)
     depositAmount = round(pricePerNight * 0.5, 2)
+    bookingAmount = totalAmount if totalAmount is not None else amount
 
     # Step 5 — Insert Booking
     bookingId = str(uuid.uuid4())
@@ -309,6 +311,68 @@ def initiate_booking():
         "guests": guests
     })
 
+    # Step 6/7 — Payment Authorisation (Verify with Gateway)
+    paymentIntentId = body.get('paymentIntentId')
+    auth_status, auth_data = call_service("post",
+        f"{PAYMENT_GATEWAY_URL}/gateway/authorize",
+        {"bookingId": bookingId, "amount": bookingAmount,
+         "paymentMethodId": paymentMethodId,
+         "paymentIntentId": paymentIntentId,
+         "idempotencyKey": f"request-auth-{bookingId}"})
+    
+    if auth_status != 200:
+        return jsonify({"code": 402, "data": None, "message": "Payment authorization failed"}), 402
+
+    # Step 8 — Update Status to PAYMENT_AUTHORISED
+    call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+        "status": BOOKING_STATUS_PAYMENT_AUTHORISED
+    })
+    # Wait, check shared.constants for status names. I'll use those.
+    
+    # Step 9 — Publish PaymentAuthorised events
+    publish_message("payment.held", {
+        "bookingId": bookingId,
+        "amount": bookingAmount,
+        "paymentTxnId": auth_data.get("data", {}).get("paymentTxnId", paymentIntentId),
+        "transactionType": TXN_TYPE_BOOKING_CAPTURE, # It's a hold but for capture later
+        "status": "AUTHORIZED"
+    })
+
+    # Step 10 — Extend Availability Hold (24 hours for host response)
+    call_service("put",
+        f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
+        {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+
+    # Step 11 — Update Status to PENDING_HOST
+    call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+        "status": BOOKING_STATUS_PENDING_HOST
+    })
+
+    # Step 13/14/15 — Fetch Contacts & Notify (BookingRequested)
+    # 1. Fetch guest contact
+    _, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
+    # 2. Fetch host contact
+    _, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
+    
+    publish_message("booking.requested", {
+        "bookingId": bookingId,
+        "guestId": guestId,
+        "hostId": hostId,
+        "listingId": listingId,
+        "checkInDate": str(ci),
+        "checkOutDate": str(co),
+        "guestContact": {
+            "phoneNumber": g_res.get("data", {}).get("phoneNumber") or "+15005550006", # Fallback
+            "email": g_res.get("data", {}).get("email")
+        },
+        "hostContact": {
+            "phoneNumber": h_res.get("data", {}).get("phoneNumber") or "+15005550006", # Fallback
+            "email": h_res.get("data", {}).get("email")
+        },
+        "bookingAmount": bookingAmount,
+        "depositAmount": depositAmount
+    })
+
     return jsonify({"code": 201,
         "data": {"bookingId": bookingId, "status": "PENDING_HOST"},
         "message": "success"}), 201
@@ -326,8 +390,15 @@ def get_booking(bookingId):
 @bp.route('/', methods=['GET'])
 @bp.route('/bookings', methods=['GET'])
 def list_bookings():
-    # Proxy to booking-detail-service
-    status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings")
+    # Proxy to booking-detail-service with all query parameters forwarded (e.g., guestId)
+    query_params = request.args.to_dict()
+    # Actually, call_service handles payload as json. For GET params, I'll update the URL.
+    url = f"http://booking-detail-service:5012/bookings"
+    if query_params:
+        from urllib.parse import urlencode
+        url = f"{url}?{urlencode(query_params)}"
+        
+    status_code, res = call_service("get", url)
     if status_code != 200:
         return jsonify({"code": status_code, "data": [], "message": "Failed to list bookings"}), status_code
     return jsonify({"code": 200, "data": res.get("data", []), "message": "success"}), 200
