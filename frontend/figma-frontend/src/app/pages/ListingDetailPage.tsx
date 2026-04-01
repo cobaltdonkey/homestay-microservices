@@ -137,13 +137,8 @@ export function ListingDetailPage() {
         hostId: listing.host.id
       };
 
-      console.log(`[REDIRECTION] Navigating to ${pendingBookingAction} with state:`, state);
-
-      if (pendingBookingAction === 'instant') {
-        navigate(`/booking/confirm-and-pay/${id}`, { state });
-      } else if (pendingBookingAction === 'request') {
-        navigate(`/booking/authorise-and-request/${id}`, { state });
-      }
+      console.log(`[REDIRECTION] Navigating to request with state:`, state);
+      navigate(`/booking/authorise-and-request/${id}`, { state });
       
       setPendingBookingAction(null);
       setPendingHold(null);
@@ -247,34 +242,7 @@ export function ListingDetailPage() {
     }
   };
 
-  const handleInstantBookClick = async () => {
-    const holdData = await checkAvailabilityBeforeBooking();
-    if (!holdData) return;
-
-    if (isLoggedIn) {
-      navigate(`/booking/confirm-and-pay/${id}`, {
-        state: { 
-          checkIn, 
-          checkOut, 
-          guests,
-          holdId: holdData.holdId,
-          expireAt: holdData.expiresAt || holdData.expireAt,
-          listingTitle: listing.propertyType,
-          imageUrl: listing.imageUrl,
-          price: listing.price,
-          rating: listing.rating,
-          reviewCount: listing.reviewCount,
-          nights
-        },
-      });
-    } else {
-      setPendingHold(holdData);
-      setPendingBookingAction('instant');
-      handleOpenAuth('login');
-    }
-  };
-
-  const handleRequestBookClick = async () => {
+  const handleBookClick = async () => {
     const holdData = await checkAvailabilityBeforeBooking();
     if (!holdData) return;
 
@@ -291,7 +259,8 @@ export function ListingDetailPage() {
           price: listing.price,
           rating: listing.rating,
           reviewCount: listing.reviewCount,
-          nights
+          nights,
+          hostId: listing.host.id
         },
       });
     } else {
@@ -551,22 +520,12 @@ export function ListingDetailPage() {
                 A refundable security deposit will be pre-authorised on your card
               </p>
 
-              {/* Booking Button - Show only one based on bookingType */}
-              {listing.bookingType === 'instant' ? (
-                <button
-                  onClick={handleInstantBookClick}
-                  className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
-                >
-                  Book Instantly
-                </button>
-              ) : (
-                <button
-                  onClick={handleRequestBookClick}
-                  className="w-full border-2 border-[#FF385C] text-[#FF385C] hover:bg-[#FFF5F7] font-semibold py-3 rounded-lg transition-colors"
-                >
-                  Request to Book
-                </button>
-              )}
+              <button
+                onClick={handleBookClick}
+                className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Request to Book
+              </button>
             </div>
           </div>
         </div>

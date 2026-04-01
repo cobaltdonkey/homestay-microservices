@@ -118,6 +118,7 @@ def initiate_booking():
         checkInDate = body.get('checkInDate')
         checkOutDate = body.get('checkOutDate')
         paymentMethodId = body.get('paymentMethodId')
+        paymentIntentId = body.get('paymentIntentId')
         bookingMode = body.get('bookingMode')
         
         holdId = body.get('holdId')
@@ -131,6 +132,9 @@ def initiate_booking():
 
         if not all([listingId, guestId, checkInDate, checkOutDate]):
              return jsonify({"code": 400, "data": None, "message": "Missing required fields"}), 400
+
+        # Generate the permanent booking ID early so it can be shared with all services
+        bookingId = str(uuid.uuid4())
 
         # Simple Instant Booking Flow
         if bookingMode == BOOKING_MODE_INSTANT:
@@ -150,7 +154,6 @@ def initiate_booking():
             depositAmount = round(amount * 0.1, 2) # Demo 10%
             
             # Step 4 — Insert Booking Record (PERSISTENCE)
-            bookingId = str(uuid.uuid4())
             call_service("post", "http://booking-detail-service:5012/bookings", {
                 "bookingId": bookingId,
                 "guestId": guestId,
@@ -252,6 +255,7 @@ def initiate_booking():
             f"{AVAILABILITY_SERVICE_URL}/holds",
             {"listingId": listingId, "guestId": guestId,
              "checkInDate": checkInDate, "checkOutDate": checkOutDate,
+             "bookingId": bookingId,
              "ttlSeconds": 86400}) # 24h
         if status_code != 201:
             return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
@@ -260,7 +264,7 @@ def initiate_booking():
         # Extend the existing hold (that is about to expire) for 24 hours
         call_service("put",
             f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 86400, "reason": "PENDING_HOST"})
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
     # Step 4 — Calculate amounts
     ci = date.fromisoformat(checkInDate)
@@ -270,7 +274,6 @@ def initiate_booking():
     depositAmount = round(pricePerNight * 0.5, 2)
 
     # Step 5 — Insert Booking Record (PERSISTENCE)
-    bookingId = str(uuid.uuid4())
     call_service("post", "http://booking-detail-service:5012/bookings", {
         "bookingId": bookingId,
         "guestId": guestId,
@@ -312,8 +315,12 @@ def get_booking(bookingId):
 @bp.route('/', methods=['GET'])
 @bp.route('/bookings', methods=['GET'])
 def list_bookings():
-    # Proxy to booking-detail-service
-    status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings")
+    # Proxy to booking-detail-service with original query string
+    qs = request.query_string.decode('utf-8')
+    url = f"http://booking-detail-service:5012/bookings"
+    if qs: url += f"?{qs}"
+    
+    status_code, res = call_service("get", url)
     if status_code != 200:
         return jsonify({"code": status_code, "data": [], "message": "Failed to list bookings"}), status_code
     return jsonify({"code": 200, "data": res.get("data", []), "message": "success"}), 200
@@ -323,11 +330,11 @@ def list_bookings():
 @bp.route('/bookings/listings/<listingId>/booked-dates', methods=['GET'])
 def get_booked_dates(listingId):
     # Proxy to booking-detail-service
-    # The detail service probably has an endpoint for this, or we can filter its /bookings
-    # Let's check if there's a dedicated endpoint in the detail service routes first.
-    # Looking at my grep earlier, I saw Class BookingDetail.
-    # I'll just proxy the call and let the detail service handle it if implemented.
-    status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings/listings/{listingId}/booked-dates")
+    qs = request.query_string.decode('utf-8')
+    url = f"http://booking-detail-service:5012/bookings/listings/{listingId}/booked-dates"
+    if qs: url += f"?{qs}"
+
+    status_code, res = call_service("get", url)
     if status_code == 200:
         return jsonify(res), 200
     

@@ -30,6 +30,10 @@ def create_app():
         try:
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS booking_amount NUMERIC(10, 2);"))
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2);"))
+            db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS listing_title VARCHAR(255);"))
+            db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS listing_image VARCHAR(500);"))
+            db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS total_amount NUMERIC(10, 2);"))
+            db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS guests INTEGER;"))
             db.session.commit()
         except BaseException as e:
             # Table might not exist yet, or not postgres
