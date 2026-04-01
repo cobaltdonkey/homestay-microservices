@@ -122,13 +122,13 @@ def create_hold():
     new_hold = Hold(
         hold_id=hold_id,
         listing_id=listing_id,
-        booking_id=booking_id,
+        booking_id=str(booking_id) if booking_id else None,
         guest_id=guest_id,
         check_in_date=check_in_date,
         check_out_date=check_out_date,
         ttl_seconds=ttl_seconds,
         expires_at=expires_at,
-        reason=reason,
+        reason=str(reason) if reason else None,
         status='HELD'
     )
 
@@ -162,13 +162,13 @@ def extend_hold(hold_id):
 
     try:
         if ttl_seconds:
-            hold.ttl_seconds = ttl_seconds
-            hold.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+            hold.ttl_seconds = int(ttl_seconds)
+            hold.expires_at = datetime.utcnow() + timedelta(seconds=int(ttl_seconds))
         if booking_id:
             print(f"[AVAILABILITY] Linking hold {hold_id} to booking {booking_id}", flush=True)
-            hold.booking_id = booking_id
+            hold.booking_id = str(booking_id)
         if reason:
-            hold.reason = reason
+            hold.reason = str(reason)
         
         db.session.add(hold)
         db.session.commit()
