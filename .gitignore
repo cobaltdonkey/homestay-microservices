@@ -42,4 +42,8 @@ env/
 venv/
 .env/
 .venv/
-.ipynb_checkpoints/
+.env
+check_user.py
+notification_logs.txt
+logs/
+*.log
