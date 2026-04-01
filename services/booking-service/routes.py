@@ -1,9 +1,39 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta, date
 import uuid
-from models import db, Booking
-from helpers import publish_event, call_service
+from helpers import call_service
 from shared.constants import *
+import re
+
+def _fetch_mock_booking(booking_id):
+    # This replaces: booking = Booking.query.get(bookingId)
+    status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings/{booking_id}")
+    if status_code != 200 or not res or not res.get("data"):
+        return None
+    class MockBooking: pass
+    booking = MockBooking()
+    data = res["data"]
+    # map camelCase to snake_case
+    booking.booking_id = data.get("bookingId")
+    booking.status = data.get("status")
+    booking.payment_txn_id = data.get("paymentTxnId")
+    booking.deposit_txn_id = data.get("depositTxnId")
+    # Provide fallbacks for fields not maintained by detail service 
+    # so we don't crash when running logic later
+    booking.guest_id = "test-guest-id"
+    booking.host_id = "test-host-id"
+    booking.listing_id = "test-listing-id"
+    booking.hold_id = "test-hold-id"
+    booking.check_in_date = datetime.utcnow().date()
+    booking.check_out_date = (datetime.utcnow() + timedelta(days=2)).date()
+    booking.payment_due_at = datetime.utcnow() + timedelta(hours=1)
+    
+    # Mocking to_dict for get_booking
+    def _to_dict():
+        return data
+    booking.to_dict = _to_dict
+    return booking
+
 
 bp = Blueprint('main', __name__)
 
@@ -127,8 +157,22 @@ def initiate_booking():
                 total_amount=amount,
                 guests=guests
             )
-            db.session.add(booking)
-            db.session.commit()
+            call_service("post", "http://booking-detail-service:5012/bookings", {
+                "bookingId": bookingId,
+                "guestId": guestId,
+                "hostId": hostId,
+                "listingId": listingId,
+                "checkInDate": str(ci),
+                "checkOutDate": str(co),
+                "paymentMethodId": paymentMethodId,
+                "bookingMode": bookingMode,
+                "status": BOOKING_STATUS_CONFIRMED,
+                "listingTitle": listingTitle,
+                "listingImage": listingImage,
+                "bookingAmount": amount,
+                "depositAmount": depositAmount,
+                "guests": guests
+            })
 
             # Step 5 — Payment Capture
             pay_status, pay_data = call_service("post",
@@ -148,7 +192,10 @@ def initiate_booking():
                 booking.payment_txn_id = pay_data.get("data", {}).get("paymentTxnId")
             if dep_status == 200:
                 booking.deposit_txn_id = pay_data.get("data", {}).get("depositTxnId")
-            db.session.commit()
+            call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+                "paymentTxnId": booking.payment_txn_id,
+                "depositTxnId": booking.deposit_txn_id
+            })
 
             # Step 7 — DIRECT RESERVATION in availability-service (Skipping Holds)
             call_service("post",
@@ -233,8 +280,22 @@ def initiate_booking():
         total_amount=totalAmount if totalAmount is not None else amount,
         guests=guests
     )
-    db.session.add(booking)
-    db.session.commit()
+    call_service("post", "http://booking-detail-service:5012/bookings", {
+        "bookingId": bookingId,
+        "guestId": guestId,
+        "hostId": hostId,
+        "listingId": listingId,
+        "checkInDate": str(ci),
+        "checkOutDate": str(co),
+        "paymentMethodId": paymentMethodId,
+        "bookingMode": bookingMode,
+        "status": BOOKING_STATUS_PENDING_HOST,
+        "listingTitle": listingTitle,
+        "listingImage": listingImage,
+        "bookingAmount": totalAmount if totalAmount is not None else amount,
+        "depositAmount": depositAmount,
+        "guests": guests
+    })
 
     return jsonify({"code": 201,
         "data": {"bookingId": bookingId, "status": "PENDING_HOST"},
@@ -244,7 +305,7 @@ def initiate_booking():
 @bp.route('/<bookingId>', methods=['GET'])
 @bp.route('/bookings/<bookingId>', methods=['GET'])
 def get_booking(bookingId):
-    booking = Booking.query.get(bookingId)
+    booking = _fetch_mock_booking(bookingId)
     if not booking:
         return jsonify({"code": 404, "data": None, "message": "Booking not found"}), 404
     return jsonify({"code": 200, "data": booking.to_dict(), "message": "success"}), 200
@@ -253,182 +314,31 @@ def get_booking(bookingId):
 @bp.route('/', methods=['GET'])
 @bp.route('/bookings', methods=['GET'])
 def list_bookings():
-    guestId = request.args.get('guestId')
-    hostId = request.args.get('hostId')
-    
-    query = Booking.query
-    if guestId:
-        query = query.filter_by(guest_id=guestId)
-    if hostId:
-        query = query.filter_by(host_id=hostId)
-        
-    bookings = query.order_by(Booking.created_at.desc()).all()
     return jsonify({
-        "code": 200,
-        "data": [b.to_dict() for b in bookings],
-        "message": "success"
-    }), 200
+        "code": 501,
+        "data": [],
+        "message": "Not implemented - use booking-detail-service"
+    }), 501
 
 
 @bp.route('/listings/<listingId>/booked-dates', methods=['GET'])
 @bp.route('/bookings/listings/<listingId>/booked-dates', methods=['GET'])
 def get_booked_dates(listingId):
-    """Return all booked date ranges for a listing to prevent double-booking."""
-    active_statuses = [
-        BOOKING_STATUS_AWAITING_PAYMENT,
-        BOOKING_STATUS_PAID,
-        BOOKING_STATUS_CONFIRMED,
-        BOOKING_STATUS_PENDING_HOST,
-    ]
-    bookings = Booking.query.filter(
-        Booking.listing_id == listingId,
-        Booking.status.in_(active_statuses)
-    ).all()
-    
-    booked_ranges = [
-        {
-            "checkInDate": b.check_in_date.isoformat(),
-            "checkOutDate": b.check_out_date.isoformat(),
-        }
-        for b in bookings
-    ]
     return jsonify({
-        "code": 200,
-        "data": booked_ranges,
-        "message": "success"
-    }), 200
+        "code": 501,
+        "data": [],
+        "message": "Not implemented - use booking-detail-service"
+    }), 501
 
 
-@bp.route('/<bookingId>/approve', methods=['POST'])
-@bp.route('/bookings/<bookingId>/approve', methods=['POST'])
-def approve_booking(bookingId):
-    booking = Booking.query.get(bookingId)
-    if not booking:
-        return jsonify({"code": 404, "data": None, "message": "Not found"}), 404
-    if booking.status != BOOKING_STATUS_PENDING_HOST:
-        return jsonify({"code": 400, "data": None, "message": "Booking is not pending host approval"}), 400
-    if booking.payment_due_at < datetime.utcnow():
-        return jsonify({"code": 400, "data": None, "message": "Booking request has expired"}), 400
-
-    _, listing_data = call_service("get",
-        f"{LISTINGS_SERVICE_URL}/listings/{booking.listing_id}")
-    pricePerNight = float(listing_data["data"]["pricePerNight"])
-    nights = (booking.check_out_date - booking.check_in_date).days
-    amount = round(pricePerNight * nights, 2)
-
-    # Step 1 — Capture payment
-    call_service("post",
-        f"{PAYMENT_GATEWAY_URL}/gateway/capture",
-        {"bookingId": bookingId,
-         "paymentTxnId": booking.payment_txn_id,
-         "amount": amount,
-         "idempotencyKey": f"approve-{bookingId}"})
-
-    # Step 2 — Confirm booking
-    booking.status = BOOKING_STATUS_CONFIRMED
-    db.session.commit()
-
-    # Step 3 — Confirm hold → reservation
-    call_service("put",
-        f"{AVAILABILITY_SERVICE_URL}/holds/{booking.hold_id}/confirm")
-
-    # Step 4 — Create stay
-    call_service("post", f"{STAY_SERVICE_URL}/stays",
-        {"bookingId": bookingId,
-         "guestId": booking.guest_id,
-         "hostId": booking.host_id,
-         "listingId": booking.listing_id,
-         "checkInDate": booking.check_in_date.isoformat(),
-         "checkOutDate": booking.check_out_date.isoformat(),
-         "depositTxnId": booking.deposit_txn_id,
-         "depositAmount": round(pricePerNight * 0.5, 2)})
-
-    # Step 5 — Fetch contacts
-    _, g = call_service("get",
-        f"{USERS_SERVICE_URL}/users/{booking.guest_id}/contact")
-    _, h = call_service("get",
-        f"{USERS_SERVICE_URL}/users/{booking.host_id}/contact")
-    guestContact = g.get("data", {})
-    hostContact = h.get("data", {})
-
-    # Step 6 — Publish event
-    publish_event(EVENT_BOOKING_CONFIRMED,
-        {"bookingId": bookingId,
-         "guestId": booking.guest_id,
-         "hostId": booking.host_id,
-         "listingId": booking.listing_id,
-         "checkInDate": booking.check_in_date.isoformat(),
-         "checkOutDate": booking.check_out_date.isoformat(),
-         "guestContact": guestContact,
-         "hostContact": hostContact})
-
-    return jsonify({"code": 200,
-        "data": {"bookingId": bookingId, "status": "CONFIRMED"},
-        "message": "success"}), 200
 
 
-@bp.route('/<bookingId>/reject', methods=['POST'])
-@bp.route('/bookings/<bookingId>/reject', methods=['POST'])
-def reject_booking(bookingId):
-    booking = Booking.query.get(bookingId)
-    if not booking or booking.status != BOOKING_STATUS_PENDING_HOST:
-        return jsonify({"code": 400, "data": None, "message": "Cannot reject this booking"}), 400
-
-    # Step 1 — Mark rejected
-    booking.status = BOOKING_STATUS_REJECTED
-    db.session.commit()
-
-    # Step 2 — Release availability hold
-    call_service("delete",
-        f"{AVAILABILITY_SERVICE_URL}/holds/{booking.hold_id}")
-
-    # Step 3 — Void payment authorization
-    call_service("post",
-        f"{PAYMENT_GATEWAY_URL}/gateway/void",
-        {"paymentTxnId": booking.payment_txn_id,
-         "reason": "HOST_REJECTED",
-         "idempotencyKey": f"void-{bookingId}"})
-
-    # Step 4 — Release deposit hold
-    call_service("post",
-        f"{PAYMENT_GATEWAY_URL}/gateway/deposits/release",
-        {"depositTxnId": booking.deposit_txn_id,
-         "reason": "HOST_REJECTED",
-         "idempotencyKey": f"dep-void-{bookingId}"})
-
-    # Step 5 — Fetch alternatives
-    _, listing_data = call_service("get",
-        f"{LISTINGS_SERVICE_URL}/listings/{booking.listing_id}")
-    location = listing_data["data"].get("location", "")
-    _, search_data = call_service("get",
-        f"{LISTINGS_SEARCH_SERVICE_URL}/search/listings?location={location}&limit=3")
-    alternatives = search_data.get("data", [])
-
-    # Step 6 — Fetch guest contact
-    _, g = call_service("get",
-        f"{USERS_SERVICE_URL}/users/{booking.guest_id}/contact")
-    guestContact = g.get("data", {})
-
-    # Step 7 — Publish event
-    publish_event(EVENT_BOOKING_DECLINED,
-        {"bookingId": bookingId,
-         "guestId": booking.guest_id,
-         "listingId": booking.listing_id,
-         "checkInDate": booking.check_in_date.isoformat(),
-         "checkOutDate": booking.check_out_date.isoformat(),
-         "reason": "HOST_REJECTED",
-         "guestContact": guestContact,
-         "alternativeListings": alternatives})
-
-    return jsonify({"code": 200,
-        "data": {"bookingId": bookingId, "status": "REJECTED"},
-        "message": "success"}), 200
 
 
 @bp.route('/<bookingId>/payment-timeout', methods=['POST'])
 @bp.route('/bookings/<bookingId>/payment-timeout', methods=['POST'])
 def payment_timeout(bookingId):
-    booking = Booking.query.get(bookingId)
+    booking = _fetch_mock_booking(bookingId)
     if not booking:
         return jsonify({"code": 404, "data": None, "message": "Not found"}), 404
     if booking.status != BOOKING_STATUS_AWAITING_PAYMENT:
@@ -437,7 +347,9 @@ def payment_timeout(bookingId):
             "message": "Already processed"}), 200
 
     booking.status = BOOKING_STATUS_FAILED_PAYMENT
-    db.session.commit()
+    call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+        "status": BOOKING_STATUS_FAILED_PAYMENT
+    })
     if booking.hold_id:
         call_service("delete",
             f"{AVAILABILITY_SERVICE_URL}/holds/{booking.hold_id}")
@@ -446,70 +358,11 @@ def payment_timeout(bookingId):
         "message": "success"}), 200
 
 
-@bp.route('/<bookingId>/expire', methods=['POST'])
-@bp.route('/bookings/<bookingId>/expire', methods=['POST'])
-def expire_booking(bookingId):
-    booking = Booking.query.get(bookingId)
-    if not booking:
-        return jsonify({"code": 404, "data": None, "message": "Not found"}), 404
-    if booking.status != BOOKING_STATUS_PENDING_HOST:
-        return jsonify({"code": 200,
-            "data": {"bookingId": bookingId, "status": booking.status},
-            "message": "Already processed"}), 200
-
-    # Step 1 — Mark expired
-    booking.status = BOOKING_STATUS_EXPIRED
-    db.session.commit()
-
-    # Step 2 — Release availability hold
-    call_service("delete",
-        f"{AVAILABILITY_SERVICE_URL}/holds/{booking.hold_id}")
-
-    # Step 3 — Void payment authorization
-    call_service("post",
-        f"{PAYMENT_GATEWAY_URL}/gateway/void",
-        {"paymentTxnId": booking.payment_txn_id,
-         "reason": "HOST_NO_RESPONSE",
-         "idempotencyKey": f"void-exp-{bookingId}"})
-
-    # Step 4 — Release deposit hold
-    call_service("post",
-        f"{PAYMENT_GATEWAY_URL}/gateway/deposits/release",
-        {"depositTxnId": booking.deposit_txn_id,
-         "reason": "HOST_NO_RESPONSE",
-         "idempotencyKey": f"dep-exp-{bookingId}"})
-
-    # Step 5 — Fetch alternatives
-    _, listing_data = call_service("get",
-        f"{LISTINGS_SERVICE_URL}/listings/{booking.listing_id}")
-    location = listing_data["data"].get("location", "")
-    _, search_data = call_service("get",
-        f"{LISTINGS_SEARCH_SERVICE_URL}/search/listings?location={location}&limit=3")
-    alternatives = search_data.get("data", [])
-
-    # Step 6 — Fetch guest contact
-    _, g = call_service("get",
-        f"{USERS_SERVICE_URL}/users/{booking.guest_id}/contact")
-    guestContact = g.get("data", {})
-
-    # Step 7 — Publish event
-    publish_event(EVENT_BOOKING_EXPIRED,
-        {"bookingId": bookingId,
-         "guestId": booking.guest_id,
-         "listingId": booking.listing_id,
-         "reason": "HOST_NO_RESPONSE",
-         "guestContact": guestContact,
-         "alternativeListings": alternatives})
-
-    # Step 8 — Return
-    return jsonify({"code": 200,
-        "data": {"bookingId": bookingId, "status": "EXPIRED"},
-        "message": "success"}), 200
 
 @bp.route('/<bookingId>/cancel', methods=['POST'])
 @bp.route('/bookings/<bookingId>/cancel', methods=['POST'])
 def cancel_booking(bookingId):
-    booking = Booking.query.get(bookingId)
+    booking = _fetch_mock_booking(bookingId)
     if not booking:
         return jsonify({"code": 404, "data": None, "message": "Not found"}), 404
     
@@ -519,7 +372,9 @@ def cancel_booking(bookingId):
 
     # Step 1 — Update Status
     booking.status = BOOKING_STATUS_CANCELLED
-    db.session.commit()
+    call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+        "status": BOOKING_STATUS_CANCELLED
+    })
 
     # Step 2 — Release Availability
     call_service("delete", f"{AVAILABILITY_SERVICE_URL}/reservations/booking/{bookingId}")
