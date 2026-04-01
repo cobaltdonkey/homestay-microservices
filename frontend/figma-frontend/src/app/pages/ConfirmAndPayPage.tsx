@@ -25,7 +25,7 @@ function ConfirmAndPayPageInner() {
   const { id } = useParams();
   const location = useLocation();
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [timeLeft, setTimeLeft] = useState(30); // 30-second soft hold
+  const [timeLeft, setTimeLeft] = useState(60); // 60-second soft hold
   const [holdId, setHoldId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const stripe = useStripe();
@@ -93,7 +93,7 @@ function ConfirmAndPayPageInner() {
         if (json.code === 201 || json.code === 200) {
           setHoldId(json.data.holdId);
           if (json.data.expireAt) {
-            setTimeLeft(30);
+            setTimeLeft(60);
           }
         }
       } catch (err) {

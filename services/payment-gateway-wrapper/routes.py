@@ -123,32 +123,59 @@ def void():
 def pre_auth():
     data = request.json or {}
     booking_id = data.get('bookingId')
+    booking_amount = data.get('bookingAmount')
     deposit_amount = data.get('depositAmount')
     payment_method_id = data.get('paymentMethodId')
     idempotency_key = data.get('idempotencyKey')
 
-    if not all([booking_id, deposit_amount, payment_method_id, idempotency_key]):
+    if not all([booking_id, payment_method_id, idempotency_key]):
         return jsonify({"code": 400, "data": {}, "message": "Missing required fields"}), 400
 
+    if not booking_amount and not deposit_amount:
+        return jsonify({"code": 400, "data": {}, "message": "Provide either bookingAmount or depositAmount"}), 400
+
     if DEMO_MODE:
-        print(f"[DEMO] Stripe call simulated: pre-auth deposit booking={booking_id} amount={deposit_amount}", flush=True)
-        txn_id = demo_txn_id()
+        print(f"[DEMO] Stripe call simulated: pre-auth booking={booking_amount} deposit={deposit_amount}", flush=True)
         return jsonify({"code": 200, "data": {
-            "depositTxnId": txn_id, "depositAmount": deposit_amount, "status": "HELD"
+            "paymentTxnId": demo_txn_id() if booking_amount else None,
+            "depositTxnId": demo_txn_id() if deposit_amount else None,
+            "status": "HELD"
         }, "message": "success"}), 200
 
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=int(float(deposit_amount) * 100),
-            currency="sgd",
-            payment_method=payment_method_id,
-            capture_method="manual",
-            confirm=True,
-            metadata={"bookingId": booking_id, "type": "deposit"},
-            idempotency_key=idempotency_key
-        )
+        results = {}
+        # 1. Authorise Booking Amount if present
+        if booking_amount:
+            booking_intent = stripe.PaymentIntent.create(
+                amount=int(float(booking_amount) * 100),
+                currency="sgd",
+                payment_method=payment_method_id,
+                capture_method="manual",
+                confirm=True,
+                metadata={"bookingId": booking_id, "type": "booking_hold"},
+                idempotency_key=f"{idempotency_key}-bk"
+            )
+            results["paymentTxnId"] = booking_intent.id
+            results["paymentStatus"] = booking_intent.status
+        
+        # 2. Authorise Deposit Amount if present
+        if deposit_amount:
+            deposit_intent = stripe.PaymentIntent.create(
+                amount=int(float(deposit_amount) * 100),
+                currency="sgd",
+                payment_method=payment_method_id,
+                capture_method="manual",
+                confirm=True,
+                metadata={"bookingId": booking_id, "type": "deposit_hold"},
+                idempotency_key=f"{idempotency_key}-dp"
+            )
+            results["depositTxnId"] = deposit_intent.id
+            results["depositStatus"] = deposit_intent.status
+
         return jsonify({"code": 200, "data": {
-            "depositTxnId": intent.id, "depositAmount": deposit_amount, "status": "HELD"
+            **results,
+            "status": "HELD",
+            "message": "Authorisation hold successful"
         }, "message": "success"}), 200
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402

@@ -21,9 +21,9 @@ function AuthoriseAndRequestPageInner() {
       const now = new Date().getTime();
       const diff = Math.floor((expiry - now) / 1000);
       console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
-      return diff > 5 ? diff : 30; // fallback to 30s if timezone parsing failed
+      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
     }
-    return 30;
+    return 60;
   });
   const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +83,7 @@ function AuthoriseAndRequestPageInner() {
         if (json.code === 201 || json.code === 200) {
           setHoldId(json.data.holdId);
           if (json.data.expireAt) {
-            setTimeLeft(30);
+            setTimeLeft(60);
           }
         }
       } catch (err) {
