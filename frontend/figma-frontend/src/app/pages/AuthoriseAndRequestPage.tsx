@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { ArrowLeft, Star, AlertCircle, Clock, CreditCard, Lock } from 'lucide-react';
@@ -15,6 +15,7 @@ function AuthoriseAndRequestPageInner() {
   const stripe = useStripe();
   const elements = useElements();
   const routeState = location.state as any || {};
+  const hasRedirected = useRef(false);
   const [timeLeft, setTimeLeft] = useState(() => {
     if (routeState.expireAt && routeState.holdId) {
       const expiry = new Date(routeState.expireAt).getTime();
@@ -64,7 +65,7 @@ function AuthoriseAndRequestPageInner() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
-  // POST /availability/hold on mount
+  // POST /availability/hold on mount (only if not already held)
   useEffect(() => {
     if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
@@ -81,9 +82,11 @@ function AuthoriseAndRequestPageInner() {
           }),
         });
         const json = await res.json();
-        if (json.code === 201) {
-          setHoldId(json.data?.holdId ?? null);
-          setTimeLeft(15);
+        if (json.code === 201 || json.code === 200) {
+          setHoldId(json.data.holdId);
+          if (json.data.expireAt) {
+            setTimeLeft(60);
+          }
         }
       } catch (err) {
         console.error('Hold failed:', err);
@@ -93,27 +96,34 @@ function AuthoriseAndRequestPageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Countdown timer
+  // Countdown timer with robust redirect prevention
   useEffect(() => {
-    if (timeLeft <= 0) {
-      const releaseHold = async () => {
-        if (holdId) {
-          try {
-            await fetch(`/bookings/request-hold/${holdId}`, { method: 'DELETE' });
-            console.log('[HOLD] Session expired, hold released:', holdId);
-          } catch (e) {
-            console.error('[HOLD] Failed to release hold:', e);
-          }
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1 && !hasRedirected.current) {
+          hasRedirected.current = true;
+          
+          const releaseHold = async () => {
+            if (holdId) {
+              try {
+                // Point to availability/hold DELETE endpoint
+                await fetch(`/availability/hold/${holdId}`, { method: 'DELETE' });
+                console.log('[HOLD] Session expired, hold released:', holdId);
+              } catch (e) {
+                console.error('[HOLD] Failed to release hold:', e);
+              }
+            }
+            alert('Payment session expired. Please try again.');
+            navigate(-1);
+          };
+          releaseHold();
+          return 0;
         }
-        alert('Payment session expired. Please try again.');
-        navigate(-1);
-      };
-      releaseHold();
-      return;
-    }
-    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
+        return prev > 0 ? prev - 1 : 0;
+      });
+    }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, navigate, holdId]);
+  }, [navigate, holdId]);
 
   const handleRequest = async () => {
     if (isSubmitting || !stripe || !elements) return;

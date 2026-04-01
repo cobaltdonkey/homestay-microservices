@@ -32,17 +32,19 @@ def setup_rabbitmq():
     channel.exchange_declare(exchange=exchange_name, exchange_type='topic', durable=True)
     
     # Define Queues and their bindings
-    queues_bindings = {
-        "payment_logs_queue": "payment.*",
-        "notification_queue": "booking.*",
-        "notification_deposit_queue": "deposit.*"
-    }
+    # Note: payment_logs_queue needs both payment.* and deposit.*
+    queues_bindings = [
+        ("payment_logs_queue", "payment.*"),
+        ("payment_logs_queue", "deposit.*"),
+        ("notification_queue", "booking.*"),
+        ("notification_deposit_queue", "deposit.*")
+    ]
     
     # Declare and bind Queues
-    for queue_name, routing_key in queues_bindings.items():
+    for queue_name, routing_key in queues_bindings:
         channel.queue_declare(queue=queue_name, durable=True)
         channel.queue_bind(exchange=exchange_name, queue=queue_name, routing_key=routing_key)
-        print(f"Declared queue '{queue_name}' and bound to exchange '{exchange_name}' with routing key '{routing_key}'.")
+        print(f"Declared/bound queue '{queue_name}' with routing key '{routing_key}'.")
         
     connection.close()
     print("RabbitMQ setup complete")

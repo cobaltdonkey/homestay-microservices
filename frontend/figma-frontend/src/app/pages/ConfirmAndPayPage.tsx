@@ -13,16 +13,8 @@ function ConfirmAndPayPageInner() {
   const location = useLocation();
   const routeState = location.state as any || {};
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [timeLeft, setTimeLeft] = useState(() => {
-    if (routeState.expireAt && routeState.holdId) {
-      const expiry = new Date(routeState.expireAt).getTime();
-      const now = new Date().getTime();
-      const diff = Math.floor((expiry - now) / 1000);
-      return diff;
-    }
-    return 0;
-  });
-  const holdId = routeState.holdId || null;
+  const [timeLeft, setTimeLeft] = useState(60); // 60-second soft hold
+  const [holdId, setHoldId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const stripe = useStripe();
   const elements = useElements();
@@ -68,6 +60,35 @@ function ConfirmAndPayPageInner() {
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };
 
+  // POST /bookings/request-hold on mount
+  useEffect(() => {
+    if (!id || !checkIn || !checkOut || holdId) return;
+    const createHold = async () => {
+      try {
+        const res = await fetch('/bookings/request-hold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            listingId: id,
+            guestId,
+            checkInDate: checkIn,
+            checkOutDate: checkOut
+          }),
+        });
+        const json = await res.json();
+        if (json.code === 201 || json.code === 200) {
+          setHoldId(json.data.holdId);
+          if (json.data.expireAt) {
+            setTimeLeft(60);
+          }
+        }
+      } catch (err) {
+        console.error('Hold failed:', err);
+      }
+    };
+    createHold();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Countdown timer
   useEffect(() => {

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta, date
 import uuid
-from helpers import call_service
+from helpers import call_service, publish_event
 from shared.constants import *
 import re
 from rabbitmq_helper import publish_message
@@ -74,7 +74,7 @@ def request_hold():
             f"{AVAILABILITY_SERVICE_URL}/holds",
             {"listingId": listingId, "guestId": guestId,
              "checkInDate": checkInDate, "checkOutDate": checkOutDate,
-             "ttlSeconds": 30})
+             "ttlSeconds": 60})
         
         if status_code != 201:
             return jsonify({"code": 409, "data": {"available": False}, "message": "Could not hold dates"}), 409
@@ -119,6 +119,7 @@ def initiate_booking():
         checkInDate = body.get('checkInDate')
         checkOutDate = body.get('checkOutDate')
         paymentMethodId = body.get('paymentMethodId')
+        paymentIntentId = body.get('paymentIntentId')
         bookingMode = body.get('bookingMode')
         
         holdId = body.get('holdId')
@@ -132,6 +133,9 @@ def initiate_booking():
 
         if not all([listingId, guestId, checkInDate, checkOutDate]):
              return jsonify({"code": 400, "data": None, "message": "Missing required fields"}), 400
+
+        # Generate the permanent booking ID early so it can be shared with all services
+        bookingId = str(uuid.uuid4())
 
         # Simple Instant Booking Flow
         if bookingMode == BOOKING_MODE_INSTANT:
@@ -150,25 +154,7 @@ def initiate_booking():
             amount = totalAmount if totalAmount else round(pricePerNight * nights, 2)
             depositAmount = round(amount * 0.1, 2) # Demo 10%
             
-            paymentIntentId = body.get('paymentIntentId')
-
-            # Step 4 — Insert Booking Record
-            bookingId = str(uuid.uuid4())
-            booking = Booking(
-                booking_id=bookingId,
-                guest_id=guestId,
-                host_id=hostId,
-                listing_id=listingId,
-                check_in_date=ci,
-                check_out_date=co,
-                payment_method_id=paymentMethodId,
-                booking_mode=bookingMode,
-                status=BOOKING_STATUS_CONFIRMED, # Go straight to confirmed
-                listing_title=listingTitle,
-                listing_image=listingImage,
-                total_amount=amount,
-                guests=guests
-            )
+            # Step 4 — Insert Booking Record (PERSISTENCE)
             call_service("post", "http://booking-detail-service:5012/bookings", {
                 "bookingId": bookingId,
                 "guestId": guestId,
@@ -201,13 +187,12 @@ def initiate_booking():
                  "paymentMethodId": paymentMethodId,
                  "idempotencyKey": f"instant-dep-{bookingId}"})
             
-            if pay_status == 200:
-                booking.payment_txn_id = pay_data.get("data", {}).get("paymentTxnId")
-            if dep_status == 200:
-                booking.deposit_txn_id = pay_data.get("data", {}).get("depositTxnId")
+            payment_txn_id = pay_data.get("data", {}).get("paymentTxnId") if pay_status == 200 else None
+            deposit_txn_id = dep_data.get("data", {}).get("depositTxnId") if dep_status == 200 else None
+
             call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
-                "paymentTxnId": booking.payment_txn_id,
-                "depositTxnId": booking.deposit_txn_id
+                "paymentTxnId": payment_txn_id,
+                "depositTxnId": deposit_txn_id
             })
 
             # Step 7 — DIRECT RESERVATION in availability-service (Skipping Holds)
@@ -226,7 +211,20 @@ def initiate_booking():
                 {"bookingId": bookingId, "guestId": guestId,
                  "hostId": hostId, "listingId": listingId,
                  "checkInDate": checkInDate, "checkOutDate": checkOutDate,
-                 "depositTxnId": booking.deposit_txn_id, "depositAmount": depositAmount})
+                 "depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
+
+            # RabbitMQ Events for Payment & Deposit
+            if payment_txn_id:
+                publish_event("payment.authorised", {
+                    "paymentTxnId": payment_txn_id, 
+                    "bookingAmount": amount
+                })
+            
+            if deposit_txn_id:
+                publish_event("deposit.preauthorised", {
+                    "depositTxnId": deposit_txn_id, 
+                    "depositAmount": depositAmount
+                })
 
             return jsonify({"code": 201,
                 "data": {"bookingId": bookingId, "status": "CONFIRMED"},
@@ -258,6 +256,7 @@ def initiate_booking():
             f"{AVAILABILITY_SERVICE_URL}/holds",
             {"listingId": listingId, "guestId": guestId,
              "checkInDate": checkInDate, "checkOutDate": checkOutDate,
+             "bookingId": bookingId,
              "ttlSeconds": 86400}) # 24h
         if status_code != 201:
             return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
@@ -266,7 +265,7 @@ def initiate_booking():
         # Extend the existing hold (that is about to expire) for 24 hours
         call_service("put",
             f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 86400, "reason": "PENDING_HOST"})
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
     # Step 4 — Calculate amounts
     ci = date.fromisoformat(checkInDate)
@@ -408,11 +407,11 @@ def list_bookings():
 @bp.route('/bookings/listings/<listingId>/booked-dates', methods=['GET'])
 def get_booked_dates(listingId):
     # Proxy to booking-detail-service
-    # The detail service probably has an endpoint for this, or we can filter its /bookings
-    # Let's check if there's a dedicated endpoint in the detail service routes first.
-    # Looking at my grep earlier, I saw Class BookingDetail.
-    # I'll just proxy the call and let the detail service handle it if implemented.
-    status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings/listings/{listingId}/booked-dates")
+    qs = request.query_string.decode('utf-8')
+    url = f"http://booking-detail-service:5012/bookings/listings/{listingId}/booked-dates"
+    if qs: url += f"?{qs}"
+
+    status_code, res = call_service("get", url)
     if status_code == 200:
         return jsonify(res), 200
     

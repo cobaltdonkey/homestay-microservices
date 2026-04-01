@@ -7,7 +7,7 @@ services:
       - name: booking-route
         paths:
           - /bookings
-        methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"]
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
         strip_path: false
 
   - name: deposit-resolution-service
