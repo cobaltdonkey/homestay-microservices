@@ -9,9 +9,8 @@ RABBITMQ_URL = os.environ.get('RABBITMQ_URL', 'amqp://guest:guest@rabbitmq:5672/
 
 def start_consumer(app):
     with app.app_context():
-        from models import PaymentTransaction
+        from models import PaymentLog
         from db import db
-        import shared.constants as constants
         
         while True:
             try:
@@ -26,35 +25,58 @@ def start_consumer(app):
                     print(f"Received message: {method.routing_key} {body}", flush=True)
                     try:
                         data = json.loads(body)
-                        amount = data.get('amount', 0)
                         booking_id = data.get('bookingId', 'unknown')
-                        payment_txn_id = data.get('paymentTxnId', str(uuid.uuid4()))
-                        transaction_type = data.get('transactionType', constants.TXN_TYPE_BOOKING_CAPTURE)
-                        idempotency_key = data.get('idempotencyKey')
-                        
-                        status = "CAPTURED"
                         routing_key = method.routing_key
                         
+                        payment_txn_id = None
+                        deposit_txn_id = None
+                        amount = None
+                        deposit_amount = None
+                        status = 'AUTHORIZED'
+                        transaction_type = 'UNKNOWN'
+                        reason = data.get('reason')
+                        
+                        # Labels and defaults based on routing key to match Step 14 doc
                         if routing_key == 'payment.authorised':
+                            transaction_type = 'BOOKING_PAYMENT_AUTHORIZE'
+                            payment_txn_id = data.get('paymentTxnId')
+                            amount = data.get('bookingAmount', 0)
                             status = 'AUTHORIZED'
                         elif routing_key == 'deposit.preauthorised':
-                            status = 'AUTHORIZED'
+                            transaction_type = 'DEPOSIT_PREAUTHORIZE'
+                            deposit_txn_id = data.get('depositTxnId')
+                            deposit_amount = data.get('depositAmount', 0)
+                            status = 'HELD'
                         elif routing_key == 'payment.error':
+                            transaction_type = 'PAYMENT_FAILED'
+                            payment_txn_id = data.get('paymentTxnId', 'ERROR')
+                            amount = data.get('amount', 0)
                             status = 'FAILED'
-                            
-                        record = PaymentTransaction(
+                        else:
+                            transaction_type = f"UNHANDLED_{routing_key.upper()}"
+                            payment_txn_id = data.get('paymentTxnId')
+                            deposit_txn_id = data.get('depositTxnId')
+                            amount = data.get('amount', 0)
+                            status = 'RECEIVED'
+
+                        idempotency_key = data.get('idempotencyKey') or f"{routing_key}-{booking_id}-{uuid.uuid4().hex[:8]}"
+                        
+                        record = PaymentLog(
                             log_id=str(uuid.uuid4()),
                             booking_id=booking_id,
                             payment_txn_id=payment_txn_id,
+                            deposit_txn_id=deposit_txn_id,
                             transaction_type=transaction_type,
                             amount=amount,
+                            deposit_amount=deposit_amount,
                             status=status,
+                            reason=reason,
                             idempotency_key=idempotency_key
                         )
                         
                         db.session.add(record)
                         db.session.commit()
-                        print(f"Inserted payment log for booking {booking_id}", flush=True)
+                        print(f"Inserted unified {transaction_type} log for booking {booking_id}", flush=True)
                     except IntegrityError:
                         db.session.rollback()
                         print("Idempotency key duplicate ignored.", flush=True)
