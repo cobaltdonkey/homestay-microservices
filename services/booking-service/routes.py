@@ -225,23 +225,55 @@ def initiate_booking():
             call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
                 {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
-        # Step 3 — Calculate amounts
+        # Step 4 — Initial Persistence (AWAITING_PAYMENT)
+        # We save the record immediately after getting the hold
         ci, co = date.fromisoformat(checkInDate), date.fromisoformat(checkOutDate)
-        nights = max(1, (co - ci).days)
-        amount = totalAmount if totalAmount else round(pricePerNight * nights, 2)
-        depositAmount = round(amount * 0.1, 2) # Use 10% demo for consistency
+        amount = totalAmount if totalAmount else round(pricePerNight * max(1, (co-ci).days), 2)
+        depositAmount = round(amount * 0.1, 2)
 
-        # Step 4 — Persistence (Detail Service)
         call_service("post", "http://booking-detail-service:5012/bookings", {
             "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
             "listingId": listingId, "checkInDate": str(ci), "checkOutDate": str(co),
             "paymentMethodId": paymentMethodId, "bookingMode": bookingMode,
-            "status": BOOKING_STATUS_PENDING_HOST, "listingTitle": listingTitle,
+            "status": "AWAITING_PAYMENT", "listingTitle": listingTitle,
             "listingImage": listingImage, "bookingAmount": amount,
-            "depositAmount": depositAmount, "guests": guests, "totalAmount": amount
+            "totalAmount": amount, "depositAmount": depositAmount, "guests": guests
         })
 
-        # Step 5 — Events
+        # Step 5 — Payment Authorization (Stripe hold)
+        # Consolidate into a single call with correct keys: bookingAmount and depositAmount
+        pay_status, pay_data = call_service("post", f"{PAYMENT_GATEWAY_URL}/gateway/pre-auth",
+            {"bookingId": bookingId, 
+             "bookingAmount": amount, 
+             "depositAmount": depositAmount,
+             "paymentMethodId": paymentMethodId,
+             "paymentIntentId": paymentIntentId, 
+             "idempotencyKey": f"req-full-{bookingId}"})
+        
+        payment_txn_id = pay_data.get("data", {}).get("paymentTxnId")
+        deposit_txn_id = pay_data.get("data", {}).get("depositTxnId")
+
+        # Step 8 — Update Status (PAYMENT_AUTHORISED)
+        call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+            "status": "PAYMENT_AUTHORISED",
+            "paymentTxnId": payment_txn_id,
+            "depositTxnId": deposit_txn_id
+        })
+
+        # Step 9 — Events
+        if payment_txn_id: publish_event("payment.authorised", {"paymentTxnId": payment_txn_id, "bookingAmount": amount})
+        if deposit_txn_id: publish_event("deposit.preauthorised", {"depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
+
+        # Step 10 — Extend Availability Hold (24h)
+        call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+
+        # Step 11 — Final Status Update (PENDING_HOST)
+        call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
+            "status": BOOKING_STATUS_PENDING_HOST
+        })
+
+        # Step 14 — Notify
         publish_event("booking.requested", {"bookingId": bookingId, "guestId": guestId, "hostId": hostId})
 
         return jsonify({"code": 201, "data": {"bookingId": bookingId, "status": "PENDING_HOST"}, "message": "success"}), 201
