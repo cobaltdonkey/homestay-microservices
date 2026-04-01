@@ -207,7 +207,7 @@ export function ListingDetailPage() {
       const checkInStr = checkIn.toISOString().split('T')[0];
       const checkOutStr = checkOut.toISOString().split('T')[0];
       
-      // New flow: Communicate with Availability microservice to create a 30s soft hold
+      // New flow: Communicate with Availability microservice to create a 120s soft hold
       const res = await fetch('/availability/hold', {
         method: 'POST',
         headers: {
@@ -218,7 +218,7 @@ export function ListingDetailPage() {
           guestId: user?.userId || 'anonymous',
           checkInDate: checkInStr,
           checkOutDate: checkOutStr,
-          ttlSeconds: 30,
+          ttlSeconds: 120,
         }),
       });
       

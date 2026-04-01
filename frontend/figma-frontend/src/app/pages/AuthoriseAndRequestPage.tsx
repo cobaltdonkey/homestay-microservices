@@ -22,9 +22,9 @@ function AuthoriseAndRequestPageInner() {
       const now = new Date().getTime();
       const diff = Math.floor((expiry - now) / 1000);
       console.log('[TIMER] expireAt:', routeState.expireAt, 'diff:', diff, 's');
-      return diff > 5 ? diff : 60; // fallback to 60s if timezone parsing failed
+      return diff > 5 ? diff : 120; // fallback to 120s if timezone parsing failed
     }
-    return 60;
+    return 120;
   });
   const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,14 +78,14 @@ function AuthoriseAndRequestPageInner() {
             guestId,
             checkInDate: checkIn,
             checkOutDate: checkOut,
-            ttlSeconds: 60,
+            ttlSeconds: 120,
           }),
         });
         const json = await res.json();
         if (json.code === 201 || json.code === 200) {
           setHoldId(json.data.holdId);
           if (json.data.expireAt) {
-            setTimeLeft(60);
+            setTimeLeft(120);
           }
         }
       } catch (err) {
@@ -106,7 +106,6 @@ function AuthoriseAndRequestPageInner() {
           const releaseHold = async () => {
             if (holdId) {
               try {
-                // Point to availability/hold DELETE endpoint
                 await fetch(`/availability/hold/${holdId}`, { method: 'DELETE' });
                 console.log('[HOLD] Session expired, hold released:', holdId);
               } catch (e) {
@@ -114,7 +113,7 @@ function AuthoriseAndRequestPageInner() {
               }
             }
             alert('Payment session expired. Please try again.');
-            navigate(-1);
+            navigate('/');
           };
           releaseHold();
           return 0;
@@ -152,28 +151,40 @@ function AuthoriseAndRequestPageInner() {
 
       const { clientSecret } = intentJson.data;
 
-      // Step 2: Confirm Authorization on Client
-      const result = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardElement,
-          billing_details: {
-            name: currentUser?.name || 'Guest User',
-            email: currentUser?.email || '',
+      // Step 2: Confirm Authorization (Skip if in Demo Mode)
+      let finalPaymentIntentId = '';
+      let finalPaymentMethodId = 'pm_demo_card';
+
+      if (clientSecret.startsWith('demo_')) {
+        console.log('[DEMO] Skipping real Stripe confirmation for demo secret');
+        finalPaymentIntentId = clientSecret.replace('secret_', 'pi_'); // simulated ID
+      } else {
+        const result = await stripe.confirmCardPayment(clientSecret, {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              name: currentUser?.name || 'Guest User',
+              email: currentUser?.email || '',
+            },
           },
-        },
-      });
+        });
 
-      if (result.error) {
-        alert(result.error.message);
-        setIsSubmitting(false);
-        return;
-      }
+        if (result.error) {
+          alert(result.error.message);
+          setIsSubmitting(false);
+          return;
+        }
 
-      // Status should be 'requires_capture' for manual capture intents
-      if (result.paymentIntent.status !== 'requires_capture' && result.paymentIntent.status !== 'succeeded') {
-        alert('Authorization failed. Status: ' + result.paymentIntent.status);
-        setIsSubmitting(false);
-        return;
+        if (result.paymentIntent.status !== 'requires_capture' && result.paymentIntent.status !== 'succeeded') {
+          alert('Authorization failed. Status: ' + result.paymentIntent.status);
+          setIsSubmitting(false);
+          return;
+        }
+
+        finalPaymentIntentId = result.paymentIntent.id;
+        finalPaymentMethodId = typeof result.paymentIntent.payment_method === 'string'
+          ? result.paymentIntent.payment_method
+          : result.paymentIntent.payment_method?.id ?? '';
       }
 
       // Step 3: Create booking with REQUEST mode
@@ -186,12 +197,14 @@ function AuthoriseAndRequestPageInner() {
           listingId: id,
           checkInDate: checkIn,
           checkOutDate: checkOut,
-          paymentIntentId: result.paymentIntent.id,
+          paymentIntentId: finalPaymentIntentId,
+          paymentMethodId: finalPaymentMethodId,
           holdId,
           bookingMode: 'REQUEST',
           listingTitle: listing.title,
           listingImage: listing.imageUrl,
           totalAmount: total,
+          depositAmount: listing.deposit,
           guests: routeState.guests || 1
         }),
       });
@@ -410,7 +423,7 @@ function AuthoriseAndRequestPageInner() {
               {/* Countdown Timer */}
               <div className="flex items-center justify-center text-sm text-[#FF385C] font-semibold">
                 <Clock className="w-4 h-4 mr-1" />
-                {timeLeft} seconds left
+                {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')} left
               </div>
             </div>
           </div>

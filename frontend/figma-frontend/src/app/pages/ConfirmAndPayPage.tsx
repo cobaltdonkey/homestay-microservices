@@ -13,7 +13,7 @@ function ConfirmAndPayPageInner() {
   const location = useLocation();
   const routeState = location.state as any || {};
   const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
-  const [timeLeft, setTimeLeft] = useState(60); // 60-second soft hold
+  const [timeLeft, setTimeLeft] = useState(120); // 120-second soft hold
   const [holdId, setHoldId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const stripe = useStripe();
