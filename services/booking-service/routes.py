@@ -205,6 +205,7 @@ def initiate_booking():
         
         listing = data["data"]
         hostId = listing.get("hostId") or hostId
+        listingTitle = listing.get("title") or listingTitle # Use official Title from DB
         pricePerNight = float(listing.get("pricePerNight", 100.0))
 
         # Step 2 — Manage availability hold
@@ -290,10 +291,13 @@ def initiate_booking():
         })
 
         # Step 13 — Retrieve User Contacts
-        USER_SERVICE_URL = "http://users-service:5011"
-        _, guest_user = call_service("get", f"{USER_SERVICE_URL}/users/{guestId}/profile")
-        _, host_user  = call_service("get", f"{USER_SERVICE_URL}/users/{hostId}/profile")
+        USER_SERVICE_URL = "http://users-service:5003"
+        s_g, guest_user = call_service("get", f"{USER_SERVICE_URL}/users/{guestId}/profile")
+        s_h, host_user  = call_service("get", f"{USER_SERVICE_URL}/users/{hostId}/profile")
         
+        print(f"[DEBUG] GUEST_ID: {guestId} | STATUS: {s_g} | DATA: {guest_user}", flush=True)
+        print(f"[DEBUG] HOST_ID: {hostId} | STATUS: {s_h} | DATA: {host_user}", flush=True)
+
         guest_details = guest_user.get("data", {}) if guest_user else {}
         host_details  = host_user.get("data", {}) if host_user else {}
 

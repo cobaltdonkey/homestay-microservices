@@ -9,45 +9,31 @@ DEMO_MODE = os.environ.get('TWILIO_DEMO_MODE', 'true').lower() == 'true'
 
 
 def send_sms(app, to_number, body, event_type, reference_id, recipient_id):
-    """Send SMS (demo or live) and persist a NotificationMessage record."""
-    with app.app_context():
-        from models import NotificationMessage
-        from db import db
+    """Send SMS (demo or live) without database persistence."""
+    status = 'SIMULATED'
 
+    if DEMO_MODE:
+        print(f"[DEMO SMS] To:{to_number} | Msg:{body}", flush=True)
         status = 'SIMULATED'
+    else:
+        try:
+            from twilio.rest import Client
+            client = Client(
+                os.environ.get('TWILIO_ACCOUNT_SID'),
+                os.environ.get('TWILIO_AUTH_TOKEN')
+            )
+            client.messages.create(
+                body=body,
+                from_=os.environ.get('TWILIO_FROM_NUMBER', '+15005550006'),
+                to=to_number
+            )
+            status = 'SENT'
+            print(f"[LIVE SMS] Successfully sent to {to_number}", flush=True)
+        except Exception as e:
+            print(f"[SMS ERROR] {e}", flush=True)
+            status = 'FAILED'
 
-        if DEMO_MODE:
-            print(f"[DEMO SMS] To:{to_number} | Msg:{body}", flush=True)
-        else:
-            try:
-                from twilio.rest import Client
-                client = Client(
-                    os.environ.get('TWILIO_ACCOUNT_SID'),
-                    os.environ.get('TWILIO_AUTH_TOKEN')
-                )
-                client.messages.create(
-                    body=body,
-                    from_=os.environ.get('TWILIO_FROM_NUMBER', '+15005550006'),
-                    to=to_number
-                )
-                status = 'SENT'
-            except Exception as e:
-                print(f"[SMS ERROR] {e}", flush=True)
-                status = 'FAILED'
-
-        record = NotificationMessage(
-            notification_id=str(uuid.uuid4()),
-            recipient_id=recipient_id,
-            recipient_phone=to_number,
-            channel='SMS',
-            message_body=body,
-            event_type=event_type,
-            reference_id=reference_id,
-            status=status
-        )
-        db.session.add(record)
-        db.session.commit()
-        return status
+    return status
 
 
 def handle_message(app, routing_key, data):
@@ -77,14 +63,15 @@ def handle_message(app, routing_key, data):
         )
 
     elif routing_key == 'booking.requested':
+        listing_title = data.get('listingTitle', 'your homestay')
         send_sms(app,
             guest_phone,
-            f"Request sent! Booking ID: {booking_id}. Awaiting host approval within 24 hours.",
+            f"Request sent! Booking ID: {booking_id} for '{listing_title}'. Stay: {check_in} to {check_out}. Awaiting host approval within 48 hours.",
             'booking.requested', booking_id, guest_id
         )
         send_sms(app,
             host_phone,
-            f"New booking request! ID: {booking_id}. Approve or decline within 24 hours.",
+            f"New booking request for '{listing_title}'! ID: {booking_id}. Guest: {guest_contact.get('name', 'Someone')} ({check_in} – {check_out}). Please approve or decline within 48 hours.",
             'booking.requested', booking_id, host_id
         )
 
