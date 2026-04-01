@@ -148,6 +148,7 @@ def create_hold():
 @main.route('/holds/<string:hold_id>/extend', methods=['PUT'])
 def extend_hold(hold_id):
     data = request.json or {}
+    print(f"[AVAILABILITY] Extending hold {hold_id} with data: {data}", flush=True)
     ttl_seconds = data.get('ttlSeconds')
     booking_id = data.get('bookingId')
     reason = data.get('reason')
@@ -164,12 +165,16 @@ def extend_hold(hold_id):
             hold.ttl_seconds = ttl_seconds
             hold.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
         if booking_id:
+            print(f"[AVAILABILITY] Linking hold {hold_id} to booking {booking_id}", flush=True)
             hold.booking_id = booking_id
         if reason:
             hold.reason = reason
+        
+        db.session.add(hold)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
+        print(f"[AVAILABILITY] Error extending hold: {e}", flush=True)
         return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
 
     return jsonify({
