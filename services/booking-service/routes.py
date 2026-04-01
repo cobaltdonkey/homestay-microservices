@@ -136,172 +136,118 @@ def initiate_booking():
         # Generate the permanent booking ID early so it can be shared with all services
         bookingId = str(uuid.uuid4())
 
-        # Simple Instant Booking Flow
+        # =============================================================
+        # MODE 1 — INSTANT BOOKING
+        # =============================================================
         if bookingMode == BOOKING_MODE_INSTANT:
-            # Step 1 — Skip listing check for speed and demo reliability
-            # But we still need a price estimate if totalAmount is missing
+            # Simple direct flow for legacy support or speed
             try:
                 days = (date.fromisoformat(checkOutDate) - date.fromisoformat(checkInDate)).days
                 pricePerNight = float(totalAmount / max(1, days)) if totalAmount else 100.0
             except:
                 pricePerNight = 100.0
             
-            # Step 3 — Calculate amounts
-            ci = date.fromisoformat(checkInDate)
-            co = date.fromisoformat(checkOutDate)
+            ci, co = date.fromisoformat(checkInDate), date.fromisoformat(checkOutDate)
             nights = max(1, (co - ci).days)
             amount = totalAmount if totalAmount else round(pricePerNight * nights, 2)
-            depositAmount = round(amount * 0.1, 2) # Demo 10%
-            
-            # Step 4 — Insert Booking Record (PERSISTENCE)
+            depositAmount = round(amount * 0.1, 2)
+
+            # Insert Booking Record
             call_service("post", "http://booking-detail-service:5012/bookings", {
-                "bookingId": bookingId,
-                "guestId": guestId,
-                "hostId": hostId,
-                "listingId": listingId,
-                "checkInDate": str(ci),
-                "checkOutDate": str(co),
-                "paymentMethodId": paymentMethodId,
-                "bookingMode": bookingMode,
-                "status": BOOKING_STATUS_CONFIRMED,
-                "listingTitle": listingTitle,
-                "listingImage": listingImage,
-                "bookingAmount": amount,
-                "depositAmount": depositAmount,
-                "guests": guests
+                "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
+                "listingId": listingId, "checkInDate": str(ci), "checkOutDate": str(co),
+                "paymentMethodId": paymentMethodId, "bookingMode": bookingMode,
+                "status": BOOKING_STATUS_CONFIRMED, "listingTitle": listingTitle,
+                "listingImage": listingImage, "bookingAmount": amount,
+                "depositAmount": depositAmount, "guests": guests
             })
 
-            # Step 5 — Payment Capture
-            pay_status, pay_data = call_service("post",
-                f"{PAYMENT_GATEWAY_URL}/gateway/capture",
-                {"bookingId": bookingId, "amount": amount,
-                 "paymentMethodId": paymentMethodId,
-                 "paymentIntentId": paymentIntentId,
-                 "idempotencyKey": f"instant-cap-{bookingId}"})
-            
-            # Step 6 — Deposit Pre-auth
-            dep_status, dep_data = call_service("post",
-                f"{PAYMENT_GATEWAY_URL}/gateway/pre-auth",
-                {"bookingId": bookingId, "depositAmount": depositAmount,
-                 "paymentMethodId": paymentMethodId,
+            # Payment logic
+            pay_status, pay_data = call_service("post", f"{PAYMENT_GATEWAY_URL}/gateway/capture",
+                {"bookingId": bookingId, "amount": amount, "paymentMethodId": paymentMethodId,
+                 "paymentIntentId": paymentIntentId, "idempotencyKey": f"instant-cap-{bookingId}"})
+            dep_status, dep_data = call_service("post", f"{PAYMENT_GATEWAY_URL}/gateway/pre-auth",
+                {"bookingId": bookingId, "depositAmount": depositAmount, "paymentMethodId": paymentMethodId,
                  "idempotencyKey": f"instant-dep-{bookingId}"})
             
             payment_txn_id = pay_data.get("data", {}).get("paymentTxnId") if pay_status == 200 else None
             deposit_txn_id = dep_data.get("data", {}).get("depositTxnId") if dep_status == 200 else None
 
             call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
-                "paymentTxnId": payment_txn_id,
-                "depositTxnId": deposit_txn_id
+                "paymentTxnId": payment_txn_id, "depositTxnId": deposit_txn_id
             })
 
-            # Step 7 — DIRECT RESERVATION in availability-service (Skipping Holds)
-            call_service("post",
-                f"{AVAILABILITY_SERVICE_URL}/reservations",
-                {"listingId": listingId, "bookingId": bookingId,
-                 "guestId": guestId, "checkInDate": checkInDate,
-                 "checkOutDate": checkOutDate})
+            # Availability
+            call_service("post", f"{AVAILABILITY_SERVICE_URL}/reservations",
+                {"listingId": listingId, "bookingId": bookingId, "guestId": guestId,
+                 "checkInDate": checkInDate, "checkOutDate": checkOutDate})
                  
-            # Also optionally cleanup the soft hold if it existed
-            if holdId:
-                call_service("delete", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}")
+            if holdId: call_service("delete", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}")
 
-            # Step 8 — Notify services (Asynchronous-like)
+            # Notify/Events
             call_service("post", f"{STAY_SERVICE_URL}/stays",
-                {"bookingId": bookingId, "guestId": guestId,
-                 "hostId": hostId, "listingId": listingId,
+                {"bookingId": bookingId, "guestId": guestId, "hostId": hostId, "listingId": listingId,
                  "checkInDate": checkInDate, "checkOutDate": checkOutDate,
                  "depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
 
-            # RabbitMQ Events for Payment & Deposit
-            if payment_txn_id:
-                publish_event("payment.authorised", {
-                    "paymentTxnId": payment_txn_id, 
-                    "bookingAmount": amount
-                })
-            
-            if deposit_txn_id:
-                publish_event("deposit.preauthorised", {
-                    "depositTxnId": deposit_txn_id, 
-                    "depositAmount": depositAmount
-                })
+            if payment_txn_id: publish_event("payment.authorised", {"paymentTxnId": payment_txn_id, "bookingAmount": amount})
+            if deposit_txn_id: publish_event("deposit.preauthorised", {"depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
 
-            return jsonify({"code": 201,
-                "data": {"bookingId": bookingId, "status": "CONFIRMED"},
-                "message": "success"}), 201
+            return jsonify({"code": 201, "data": {"bookingId": bookingId, "status": "CONFIRMED"}, "message": "success"}), 201
+
+        # =============================================================
+        # MODE 2 — REQUEST TO BOOK (Standard)
+        # =============================================================
+        # Step 1 — Validate listing
+        status_code, data = call_service("get", f"{LISTINGS_SERVICE_URL}/listings/{listingId}")
+        if status_code != 200:
+            return jsonify({"code": 400, "data": None, "message": "Listing not found"}), 400
+        
+        listing = data["data"]
+        hostId = listing.get("hostId") or hostId
+        pricePerNight = float(listing.get("pricePerNight", 100.0))
+
+        # Step 2 — Manage availability hold
+        if not holdId:
+            status_code, data = call_service("get",
+                f"{AVAILABILITY_SERVICE_URL}/availability?listingId={listingId}&checkInDate={checkInDate}&checkOutDate={checkOutDate}")
+            if status_code != 200 or not data["data"]["available"]:
+                return jsonify({"code": 409, "data": None, "message": "Dates not available"}), 409
+
+            status_code_h, data_h = call_service("post", f"{AVAILABILITY_SERVICE_URL}/holds",
+                {"listingId": listingId, "guestId": guestId, "checkInDate": checkInDate,
+                 "checkOutDate": checkOutDate, "bookingId": bookingId, "ttlSeconds": 86400})
+            if status_code_h != 201:
+                return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
+            holdId = data_h["data"]["holdId"]
+        else:
+            # Extend and link existing hold
+            call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
+                {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+
+        # Step 3 — Calculate amounts
+        ci, co = date.fromisoformat(checkInDate), date.fromisoformat(checkOutDate)
+        nights = max(1, (co - ci).days)
+        amount = totalAmount if totalAmount else round(pricePerNight * nights, 2)
+        depositAmount = round(amount * 0.1, 2) # Use 10% demo for consistency
+
+        # Step 4 — Persistence (Detail Service)
+        call_service("post", "http://booking-detail-service:5012/bookings", {
+            "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
+            "listingId": listingId, "checkInDate": str(ci), "checkOutDate": str(co),
+            "paymentMethodId": paymentMethodId, "bookingMode": bookingMode,
+            "status": BOOKING_STATUS_PENDING_HOST, "listingTitle": listingTitle,
+            "listingImage": listingImage, "bookingAmount": amount,
+            "depositAmount": depositAmount, "guests": guests, "totalAmount": amount
+        })
+
+        # Step 5 — Events
+        publish_event("booking.requested", {"bookingId": bookingId, "guestId": guestId, "hostId": hostId})
+
+        return jsonify({"code": 201, "data": {"bookingId": bookingId, "status": "PENDING_HOST"}, "message": "success"}), 201
     except Exception as e:
         print(f"[CRITICAL] initiate_booking crashed: {e}", flush=True)
         return jsonify({"code": 500, "data": str(e), "message": "Internal server error"}), 500
-
-    # ORIGINAL FLOW for REQUEST mode
-    # Step 1 — Validate listing
-    status_code, data = call_service("get",
-        f"{LISTINGS_SERVICE_URL}/listings/{listingId}")
-    if status_code != 200:
-        return jsonify({"code": 400, "data": None, "message": "Listing not found"}), 400
-    listing = data["data"]
-    hostId = listing["hostId"]
-    pricePerNight = float(listing["pricePerNight"])
-
-    if not holdId:
-        # Step 2 — Check availability
-        status_code, data = call_service("get",
-            f"{AVAILABILITY_SERVICE_URL}/availability"
-            f"?listingId={listingId}&checkInDate={checkInDate}&checkOutDate={checkOutDate}")
-        if status_code != 200 or not data["data"]["available"]:
-            return jsonify({"code": 409, "data": None, "message": "Dates not available"}), 409
-
-        # Step 3 — Create hold
-        status_code, data = call_service("post",
-            f"{AVAILABILITY_SERVICE_URL}/holds",
-            {"listingId": listingId, "guestId": guestId,
-             "checkInDate": checkInDate, "checkOutDate": checkOutDate,
-             "bookingId": bookingId,
-             "ttlSeconds": 86400}) # 24h
-        if status_code != 201:
-            return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
-        holdId = data["data"]["holdId"]
-    else:
-        # Extend the existing hold (that is about to expire) for 24 hours
-        call_service("put",
-            f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
-
-    # Step 4 — Calculate amounts
-    ci = date.fromisoformat(checkInDate)
-    co = date.fromisoformat(checkOutDate)
-    nights = (co - ci).days
-    amount = round(pricePerNight * nights, 2)
-    depositAmount = round(pricePerNight * 0.5, 2)
-
-    # Step 5 — Insert Booking Record (PERSISTENCE)
-    call_service("post", "http://booking-detail-service:5012/bookings", {
-        "bookingId": bookingId,
-        "guestId": guestId,
-        "hostId": hostId,
-        "listingId": listingId,
-        "checkInDate": str(ci),
-        "checkOutDate": str(co),
-        "paymentMethodId": paymentMethodId,
-        "bookingMode": bookingMode,
-        "status": BOOKING_STATUS_PENDING_HOST,
-        "listingTitle": listingTitle,
-        "listingImage": listingImage,
-        "bookingAmount": totalAmount if totalAmount is not None else amount,
-        "depositAmount": depositAmount,
-        "guests": guests
-    })
-
-    # RabbitMQ Event for Booking Request
-    publish_event("booking.requested", {
-        "bookingId": bookingId,
-        "guestId": guestId,
-        "hostId": hostId
-    })
-
-    return jsonify({"code": 201,
-        "data": {"bookingId": bookingId, "status": "PENDING_HOST"},
-        "message": "success"}), 201
-
 
 @bp.route('/<bookingId>', methods=['GET'])
 @bp.route('/bookings/<bookingId>', methods=['GET'])
