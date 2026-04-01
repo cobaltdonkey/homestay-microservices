@@ -25,7 +25,7 @@ function AuthoriseAndRequestPageInner() {
     }
     return 60;
   });
-  const holdId = routeState.holdId || null;
+  const [holdId, setHoldId] = useState<string | null>(routeState.holdId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Booking context from router state
@@ -119,44 +119,54 @@ function AuthoriseAndRequestPageInner() {
     if (isSubmitting || !stripe || !elements) return;
     setIsSubmitting(true);
     try {
-      // Step 0: Stripe Tokenization (Demo Mode)
       const cardElement = elements.getElement(CardElement);
       if (!cardElement) throw new Error("Card element not found");
 
-      const { error, paymentMethod } = await stripe.createPaymentMethod({
-        type: 'card',
-        card: cardElement,
-      });
-
-      if (error) {
-        alert(error.message);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      const realPaymentMethodId = paymentMethod.id;
-
-      // Step 1: Pre-authorize card via gateway API
-      const authRes = await fetch('/gateway/authorize', {
+      // Step 1: Create Payment Intent with manual capture (Authorization)
+      const intentRes = await fetch('/gateway/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: total,
-          currency: 'SGD',
-          paymentMethodId: realPaymentMethodId,
-          bookingId: `demo-${Date.now()}`,
-          idempotencyKey: `pay-${Date.now()}`
+          bookingId: `pi-auth-${Date.now()}`,
+          currency: 'sgd',
+          capture_method: 'manual'
         }),
       });
-      const authJson = await authRes.json();
-      if (authJson.code !== 200) {
-        alert(authJson.message || 'Payment gateway declined authorization.');
+      const intentJson = await intentRes.json();
+      if (intentJson.code !== 200) {
+        alert(intentJson.message || 'Failed to initialize authorization.');
         setIsSubmitting(false);
         return;
       }
-      const paymentMethodId = realPaymentMethodId;
 
-      // Step 2: Create booking with REQUEST mode
+      const { clientSecret } = intentJson.data;
+
+      // Step 2: Confirm Authorization on Client
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: currentUser?.name || 'Guest User',
+            email: currentUser?.email || '',
+          },
+        },
+      });
+
+      if (result.error) {
+        alert(result.error.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Status should be 'requires_capture' for manual capture intents
+      if (result.paymentIntent.status !== 'requires_capture' && result.paymentIntent.status !== 'succeeded') {
+        alert('Authorization failed. Status: ' + result.paymentIntent.status);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Step 3: Create booking with REQUEST mode
       const bookingRes = await fetch('/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -166,7 +176,7 @@ function AuthoriseAndRequestPageInner() {
           listingId: id,
           checkInDate: checkIn,
           checkOutDate: checkOut,
-          paymentMethodId,
+          paymentIntentId: result.paymentIntent.id,
           holdId,
           bookingMode: 'REQUEST',
           listingTitle: listing.title,
@@ -183,7 +193,7 @@ function AuthoriseAndRequestPageInner() {
       }
     } catch (err) {
       console.error('Request booking failed:', err);
-      alert('Request failed. Is the backend running?');
+      alert('Request failed. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -271,14 +281,14 @@ function AuthoriseAndRequestPageInner() {
 
             {/* Section 2: Payment — Stripe Element */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card via Stripe API (Demo)</h2>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card</h2>
               <div className="border border-[#EBEBEB] rounded-xl overflow-hidden bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-4 text-[#717171]">
                   <CreditCard className="w-5 h-5" />
                   <span className="text-sm font-semibold">Credit or Debit Card</span>
                   <div className="ml-auto flex items-center gap-1 text-xs">
                     <Lock className="w-3 h-3" />
-                    Test Demo API
+                    Secure Sandbox
                   </div>
                 </div>
                 
