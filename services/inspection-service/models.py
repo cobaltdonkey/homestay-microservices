@@ -5,7 +5,8 @@ from db import db
 
 class InspectionReport(db.Model):
     __tablename__ = 'inspection_report'
-    
+    __table_args__ = {"schema": "inspection_db"}
+
     inspection_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     stay_id = db.Column(db.String(36), nullable=False, unique=True)
     host_id = db.Column(db.String(36), nullable=False)

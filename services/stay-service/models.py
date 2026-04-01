@@ -4,6 +4,7 @@ from db import db
 
 class Stay(db.Model):
     __tablename__ = 'stay'
+    __table_args__ = {"schema": "stay_db"}
     
     stay_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     booking_id = db.Column(db.String(36), nullable=False, unique=True)
