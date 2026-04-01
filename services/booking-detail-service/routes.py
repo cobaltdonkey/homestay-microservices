@@ -30,7 +30,7 @@ def list_bookings():
             "checkInDate": str(b.check_in_date) if b.check_in_date else None,
             "checkOutDate": str(b.check_out_date) if b.check_out_date else None,
             "bookingAmount": float(b.booking_amount) if b.booking_amount is not None else None,
-            "totalAmount": float(b.booking_amount) if b.booking_amount is not None else None,
+            "totalAmount": float(b.total_amount if b.total_amount is not None else b.booking_amount) if (b.total_amount is not None or b.booking_amount is not None) else None,
             "depositAmount": float(b.deposit_amount) if b.deposit_amount is not None else None,
             "listingTitle": b.listing_title,
             "listingImage": b.listing_image,

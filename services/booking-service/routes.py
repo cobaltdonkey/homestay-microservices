@@ -226,10 +226,25 @@ def initiate_booking():
                 {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
         # Step 4 — Initial Persistence (AWAITING_PAYMENT)
-        # We save the record immediately after getting the hold
+        # Prioritize amounts from the frontend to match the UI precisely
+        bookingAmountFromUI = body.get('bookingAmount')
+        depositAmountFromUI = body.get('depositAmount')
+        
         ci, co = date.fromisoformat(checkInDate), date.fromisoformat(checkOutDate)
-        amount = totalAmount if totalAmount else round(pricePerNight * max(1, (co-ci).days), 2)
-        depositAmount = round(amount * 0.1, 2)
+        
+        # Determine logical amounts
+        if totalAmount and depositAmountFromUI:
+            # If we have total and deposit, booking amount is the difference
+            depositAmount = float(depositAmountFromUI)
+            amount = float(totalAmount) - depositAmount
+        elif bookingAmountFromUI and depositAmountFromUI:
+            amount = float(bookingAmountFromUI)
+            depositAmount = float(depositAmountFromUI)
+        else:
+            # Fallback to calculation if somehow missing
+            total = float(totalAmount) if totalAmount else round(pricePerNight * max(1, (co-ci).days), 2)
+            depositAmount = round(total * 0.1, 2)
+            amount = total - depositAmount
 
         call_service("post", "http://booking-detail-service:5012/bookings", {
             "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
@@ -237,7 +252,8 @@ def initiate_booking():
             "paymentMethodId": paymentMethodId, "bookingMode": bookingMode,
             "status": "AWAITING_PAYMENT", "listingTitle": listingTitle,
             "listingImage": listingImage, "bookingAmount": amount,
-            "totalAmount": amount, "depositAmount": depositAmount, "guests": guests
+            "totalAmount": totalAmount or (amount + depositAmount), 
+            "depositAmount": depositAmount, "guests": guests
         })
 
         # Step 5 — Payment Authorization (Stripe hold)
@@ -273,8 +289,33 @@ def initiate_booking():
             "status": BOOKING_STATUS_PENDING_HOST
         })
 
+        # Step 13 — Retrieve User Contacts
+        USER_SERVICE_URL = "http://users-service:5011"
+        _, guest_user = call_service("get", f"{USER_SERVICE_URL}/users/{guestId}/profile")
+        _, host_user  = call_service("get", f"{USER_SERVICE_URL}/users/{hostId}/profile")
+        
+        guest_details = guest_user.get("data", {}) if guest_user else {}
+        host_details  = host_user.get("data", {}) if host_user else {}
+
         # Step 14 — Notify
-        publish_event("booking.requested", {"bookingId": bookingId, "guestId": guestId, "hostId": hostId})
+        publish_event("booking.requested", {
+            "bookingId": bookingId, 
+            "guestId": guest_details.get("userId"), 
+            "hostId": host_details.get("userId"),
+            "guestContact": {
+                "name": guest_details.get("name"),
+                "email": guest_details.get("email"),
+                "phoneNumber": guest_details.get("phoneNumber")
+            },
+            "hostContact": {
+                "name": host_details.get("name"),
+                "email": host_details.get("email"),
+                "phoneNumber": host_details.get("phoneNumber")
+            },
+            "checkInDate": str(ci),
+            "checkOutDate": str(co),
+            "listingTitle": listingTitle
+        })
 
         return jsonify({"code": 201, "data": {"bookingId": bookingId, "status": "PENDING_HOST"}, "message": "success"}), 201
     except Exception as e:

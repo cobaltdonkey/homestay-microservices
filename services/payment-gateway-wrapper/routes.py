@@ -210,21 +210,31 @@ def pre_auth():
 
     try:
         results = {}
-        # 1. Authorise Booking Amount if present
+        payment_intent_id = data.get('paymentIntentId')
+
+        # 1. Booking Amount — if frontend already confirmed an intent, reuse it
         if booking_amount:
-            booking_intent = stripe.PaymentIntent.create(
-                amount=int(float(booking_amount) * 100),
-                currency="sgd",
-                payment_method=payment_method_id,
-                capture_method="manual",
-                confirm=True,
-                metadata={"bookingId": booking_id, "type": "booking_hold"},
-                idempotency_key=f"{idempotency_key}-bk"
-            )
-            results["paymentTxnId"] = booking_intent.id
-            results["paymentStatus"] = booking_intent.status
-        
-        # 2. Authorise Deposit Amount if present
+            if payment_intent_id:
+                # Frontend already confirmed this intent (manual capture = requires_capture)
+                # Just retrieve and verify it
+                booking_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+                results["paymentTxnId"] = booking_intent.id
+                results["paymentStatus"] = booking_intent.status
+            else:
+                # No existing intent — create a new authorization hold
+                booking_intent = stripe.PaymentIntent.create(
+                    amount=int(float(booking_amount) * 100),
+                    currency="sgd",
+                    payment_method=payment_method_id,
+                    capture_method="manual",
+                    confirm=True,
+                    metadata={"bookingId": booking_id, "type": "booking_hold"},
+                    idempotency_key=f"{idempotency_key}-bk"
+                )
+                results["paymentTxnId"] = booking_intent.id
+                results["paymentStatus"] = booking_intent.status
+
+        # 2. Deposit Amount — always create a separate intent
         if deposit_amount:
             deposit_intent = stripe.PaymentIntent.create(
                 amount=int(float(deposit_amount) * 100),
