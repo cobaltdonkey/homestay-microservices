@@ -191,8 +191,8 @@ def initiate_booking():
                  "checkInDate": checkInDate, "checkOutDate": checkOutDate,
                  "depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
 
-            if payment_txn_id: publish_event("payment.authorised", {"paymentTxnId": payment_txn_id, "bookingAmount": amount})
-            if deposit_txn_id: publish_event("deposit.preauthorised", {"depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
+            if payment_txn_id: publish_event("payment.authorised", {"bookingId": bookingId, "paymentTxnId": payment_txn_id, "bookingAmount": amount})
+            if deposit_txn_id: publish_event("deposit.preauthorised", {"bookingId": bookingId, "depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
 
             return jsonify({"code": 201, "data": {"bookingId": bookingId, "status": "CONFIRMED"}, "message": "success"}), 201
 
@@ -279,8 +279,8 @@ def initiate_booking():
         })
 
         # Step 9 — Events
-        if payment_txn_id: publish_event("payment.authorised", {"paymentTxnId": payment_txn_id, "bookingAmount": amount})
-        if deposit_txn_id: publish_event("deposit.preauthorised", {"depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
+        if payment_txn_id: publish_event("payment.authorised", {"bookingId": bookingId, "paymentTxnId": payment_txn_id, "bookingAmount": amount})
+        if deposit_txn_id: publish_event("deposit.preauthorised", {"bookingId": bookingId, "depositTxnId": deposit_txn_id, "depositAmount": depositAmount})
 
         # Step 10 — Extend Availability Hold (24h)
         call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
