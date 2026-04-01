@@ -6,6 +6,7 @@ from shared.constants import *
 
 class DepositResolution(db.Model):
     __tablename__ = 'deposit_resolution'
+    __table_args__ = {"schema": "deposit_db"}
 
     resolution_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     stay_id = db.Column(db.String(36), nullable=False)

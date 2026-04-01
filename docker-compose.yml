@@ -62,6 +62,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./services/shared:/app/shared
+      - ./services/booking-service:/app
     networks:
       - airbnb-net
     expose:
@@ -161,6 +162,7 @@ services:
     volumes:
       - ./services/shared:/app/shared
       - ./infra:/app/infra
+      - ./services/users-service:/app
     networks:
       - airbnb-net
     expose:
@@ -336,6 +338,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./services/shared:/app/shared
+      - ./services/notification-gateway:/app
     networks:
       - airbnb-net
     expose:
