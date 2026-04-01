@@ -81,9 +81,11 @@ function AuthoriseAndRequestPageInner() {
           }),
         });
         const json = await res.json();
-        if (json.code === 201) {
-          setHoldId(json.data?.holdId ?? null);
-          setTimeLeft(15);
+        if (json.code === 201 || json.code === 200) {
+          setHoldId(json.data.holdId);
+          if (json.data.expireAt) {
+            setTimeLeft(60);
+          }
         }
       } catch (err) {
         console.error('Hold failed:', err);

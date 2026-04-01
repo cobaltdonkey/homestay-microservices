@@ -35,9 +35,9 @@ def start_consumer(app):
                         status = "CAPTURED"
                         routing_key = method.routing_key
                         
-                        if routing_key == 'payment.success':
-                            status = data.get('status', 'CAPTURED')
-                        elif routing_key == 'payment.held':
+                        if routing_key == 'payment.authorised':
+                            status = 'AUTHORIZED'
+                        elif routing_key == 'deposit.preauthorised':
                             status = 'AUTHORIZED'
                         elif routing_key == 'payment.error':
                             status = 'FAILED'
