@@ -3,6 +3,7 @@ from db import db
 from models import BookingDetail
 import uuid
 import sys
+from datetime import datetime, timezone
 
 main = Blueprint('main', __name__)
 
@@ -34,7 +35,8 @@ def list_bookings():
             "depositAmount": float(b.deposit_amount) if b.deposit_amount is not None else None,
             "listingTitle": b.listing_title,
             "listingImage": b.listing_image,
-            "createdAt": b.created_at.isoformat() if b.created_at else None
+            "paymentDueAt": b.payment_due_at.isoformat() + "Z" if b.payment_due_at else None,
+            "createdAt": b.created_at.isoformat() + "Z" if b.created_at else None
         } for b in bookings],
         "message": "success"
     }), 200
@@ -61,7 +63,8 @@ def create_booking():
             booking_mode=data.get('bookingMode'),
             listing_title=data.get('listingTitle'),
             listing_image=data.get('listingImage'),
-            guests=data.get('guests')
+            guests=data.get('guests'),
+            payment_due_at=datetime.fromisoformat(data.get('paymentDueAt').replace('Z', '+00:00')) if data.get('paymentDueAt') else None
         )
         
         db.session.add(new_booking)
@@ -81,12 +84,23 @@ def get_booking(id):
         return jsonify({"error": "Not found"}), 404
         
     return jsonify({
-        "bookingId": booking.booking_id,
-        "status": booking.status,
-        "paymentTxnId": booking.payment_txn_id,
-        "depositTxnId": booking.deposit_txn_id,
-        "bookingAmount": float(booking.booking_amount) if booking.booking_amount is not None else None,
-        "depositAmount": float(booking.deposit_amount) if booking.deposit_amount is not None else None
+        "code": 200,
+        "message": "success",
+        "data": {
+            "bookingId": booking.booking_id,
+            "status": booking.status,
+            "paymentTxnId": booking.payment_txn_id,
+            "depositTxnId": booking.deposit_txn_id,
+            "listingTitle": booking.listing_title,
+            "listingImage": booking.listing_image,
+            "checkInDate": str(booking.check_in_date) if booking.check_in_date else None,
+            "checkOutDate": str(booking.check_out_date) if booking.check_out_date else None,
+            "guests": booking.guests,
+            "bookingAmount": float(booking.booking_amount) if booking.booking_amount is not None else None,
+            "totalAmount": float(booking.total_amount if booking.total_amount is not None else booking.booking_amount) if (booking.total_amount is not None or booking.booking_amount is not None) else None,
+            "depositAmount": float(booking.deposit_amount) if booking.deposit_amount is not None else None,
+            "paymentDueAt": booking.payment_due_at.isoformat() + "Z" if booking.payment_due_at else None
+        }
     }), 200
 
 @main.route('/bookings/<id>', methods=['PUT'])
@@ -107,6 +121,8 @@ def update_booking(id):
             booking.booking_amount = data['bookingAmount']
         if 'depositAmount' in data:
             booking.deposit_amount = data['depositAmount']
+        if 'paymentDueAt' in data:
+            booking.payment_due_at = datetime.fromisoformat(data['paymentDueAt'].replace('Z', '+00:00')) if data['paymentDueAt'] else None
             
         db.session.commit()
         return jsonify({"message": "OK"}), 200

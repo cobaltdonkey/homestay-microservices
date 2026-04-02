@@ -7,30 +7,90 @@ import { Clock, ArrowLeft } from 'lucide-react';
 export function RequestSentPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [timeRemaining, setTimeRemaining] = useState({ hours: 23, minutes: 59, seconds: 50 });
+  const [booking, setBooking] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState({ hours: 23, minutes: 59, seconds: 59 });
+
+  const calculateTimeRemaining = (targetDate: string) => {
+    const total = Date.parse(targetDate) - Date.now();
+    if (total <= 0) return { hours: 0, minutes: 0, seconds: 0 };
+    
+    const seconds = Math.floor((total / 1000) % 60);
+    const minutes = Math.floor((total / 1000 / 60) % 60);
+    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(total / (1000 * 60 * 60 * 24));
+    
+    return { 
+      hours: hours + (days * 24), 
+      minutes, 
+      seconds 
+    };
+  };
+
+  // Fetch real booking from backend
+  useEffect(() => {
+    const fetchBooking = async () => {
+      if (!id) return;
+      try {
+        const res = await fetch(`/bookings/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch booking');
+        const data = await res.json();
+        const bookingData = data.data || data; // Handle both wrapped and unwrapped for safety
+        setBooking(bookingData);
+        
+        if (bookingData.paymentDueAt) {
+          setTimeRemaining(calculateTimeRemaining(bookingData.paymentDueAt));
+        }
+      } catch (err) {
+        console.error('Fetch booking error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchBooking();
+  }, [id]);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeRemaining(prev => {
-        // Count down seconds
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        } else {
-          // Timer expired
+      if (booking?.paymentDueAt) {
+        const remaining = calculateTimeRemaining(booking.paymentDueAt);
+        setTimeRemaining(remaining);
+        
+        if (remaining.hours === 0 && remaining.minutes === 0 && remaining.seconds === 0) {
           clearInterval(timer);
           alert('Request expired. The host did not respond within 24 hours.');
           navigate('/my-trips');
-          return prev;
         }
-      });
+      }
     }, 1000); // Update every second
 
     return () => clearInterval(timer);
-  }, [navigate]);
+  }, [navigate, booking]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Navbar />
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF385C]"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Navbar />
+        <div className="text-center py-20">
+          <h2 className="text-2xl font-bold mb-4">Booking not found</h2>
+          <button onClick={() => navigate('/')} className="text-[#FF385C] font-semibold underline">
+            Return home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -85,17 +145,21 @@ export function RequestSentPage() {
           <div className="bg-[#F7F7F7] rounded-xl p-6 text-left space-y-4 mb-8">
             <div className="flex justify-between items-center">
               <span className="text-[#717171]">Booking ID</span>
-              <span className="font-semibold text-[#222222]">BKG-20240002</span>
+              <span className="font-semibold text-[#222222] uppercase">{booking.bookingId?.split('-')[0] || 'N/A'}</span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-[#717171]">Listing</span>
-              <span className="font-semibold text-[#222222]">Loft in Bugis</span>
+              <span className="font-semibold text-[#222222] truncate ml-4 text-right">
+                {booking.listingTitle || 'Homestay'}
+              </span>
             </div>
 
             <div className="flex justify-between items-center">
               <span className="text-[#717171]">Dates</span>
-              <span className="font-semibold text-[#222222]">15 Jun – 18 Jun 2025</span>
+              <span className="font-semibold text-[#222222]">
+                {booking.checkInDate} – {booking.checkOutDate}
+              </span>
             </div>
           </div>
 

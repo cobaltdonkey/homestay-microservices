@@ -17,6 +17,7 @@ interface Booking {
   total: number;
   createdAt: string;
   timeRemaining?: { hours: number; minutes: number; seconds: number };
+  paymentDueAt?: string;
 }
 
 
@@ -29,6 +30,22 @@ export function MyTripsPage() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const calculateTimeRemaining = (targetDate: string) => {
+    const total = Date.parse(targetDate) - Date.now();
+    if (total <= 0) return { hours: 0, minutes: 0, seconds: 0 };
+    
+    const seconds = Math.floor((total / 1000) % 60);
+    const minutes = Math.floor((total / 1000 / 60) % 60);
+    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(total / (1000 * 60 * 60 * 24));
+    
+    return { 
+      hours: hours + (days * 24), 
+      minutes, 
+      seconds 
+    };
+  };
 
   // Fetch real bookings from backend
   useEffect(() => {
@@ -55,7 +72,9 @@ export function MyTripsPage() {
             status: ((b.status ?? 'CONFIRMED').toUpperCase()) as BookingStatus,
             guests: b.guests ?? 1,
             total: Number(b.totalAmount ?? 0),
-            createdAt: b.createdAt
+            createdAt: b.createdAt,
+            timeRemaining: b.paymentDueAt ? calculateTimeRemaining(b.paymentDueAt) : undefined,
+            paymentDueAt: b.paymentDueAt
           }));
           setBookings(mapped);
         }
@@ -69,17 +88,15 @@ export function MyTripsPage() {
     fetchBookings();
   }, []);
 
-  // Real-time countdown for pending bookings
   useEffect(() => {
     const timer = setInterval(() => {
       setBookings(prev => {
         return prev.map(booking => {
-          if (booking.status === 'PENDING_HOST' && booking.timeRemaining) {
-            const { hours, minutes, seconds } = booking.timeRemaining;
+          if (booking.status === 'PENDING_HOST' && booking.paymentDueAt) {
+            const newRemaining = calculateTimeRemaining(booking.paymentDueAt);
             
             // Check if expired
-            if (hours === 0 && minutes === 0 && seconds === 0) {
-              alert(`Booking ${booking.bookingId} has expired. The host did not respond within 24 hours.`);
+            if (newRemaining.hours === 0 && newRemaining.minutes === 0 && newRemaining.seconds === 0) {
               return {
                 ...booking,
                 status: 'EXPIRED' as BookingStatus,
@@ -87,29 +104,29 @@ export function MyTripsPage() {
               };
             }
             
-            // Count down
+            return {
+              ...booking,
+              timeRemaining: newRemaining
+            };
+          } else if (booking.status === 'PENDING_HOST' && booking.timeRemaining) {
+            // Fallback for legacy
+            const { hours, minutes, seconds } = booking.timeRemaining;
+            if (hours === 0 && minutes === 0 && seconds === 0) {
+              return { ...booking, status: 'EXPIRED' as BookingStatus, timeRemaining: undefined };
+            }
             if (seconds > 0) {
-              return {
-                ...booking,
-                timeRemaining: { ...booking.timeRemaining, seconds: seconds - 1 }
-              };
+              return { ...booking, timeRemaining: { ...booking.timeRemaining, seconds: seconds - 1 } };
             } else if (minutes > 0) {
-              return {
-                ...booking,
-                timeRemaining: { hours, minutes: minutes - 1, seconds: 59 }
-              };
+              return { ...booking, timeRemaining: { hours, minutes: minutes - 1, seconds: 59 } };
             } else if (hours > 0) {
-              return {
-                ...booking,
-                timeRemaining: { hours: hours - 1, minutes: 59, seconds: 59 }
-              };
+              return { ...booking, timeRemaining: { hours: hours - 1, minutes: 59, seconds: 59 } };
             }
           }
           
           return booking;
         });
       });
-    }, 1000); // Update every second
+    }, 1000);
 
     return () => clearInterval(timer);
   }, []);

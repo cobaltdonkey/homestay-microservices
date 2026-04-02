@@ -20,25 +20,26 @@ def _fetch_mock_booking(booking_id):
     status_code, res = call_service("get", f"http://booking-detail-service:5012/bookings/{booking_id}")
     if status_code != 200 or not res or not res.get("data"):
         return None
+    
     class MockBooking: pass
     booking = MockBooking()
     data = res["data"]
-    # map camelCase to snake_case
+    
+    # Map camelCase to snake_case for the internal Booking object representation
+    # This ensures consistency with the rest of the booking-service logic
     booking.booking_id = data.get("bookingId")
     booking.status = data.get("status")
     booking.payment_txn_id = data.get("paymentTxnId")
     booking.deposit_txn_id = data.get("depositTxnId")
-    # Provide fallbacks for fields not maintained by detail service 
-    # so we don't crash when running logic later
-    booking.guest_id = "test-guest-id"
-    booking.host_id = "test-host-id"
-    booking.listing_id = "test-listing-id"
-    booking.hold_id = "test-hold-id"
-    booking.check_in_date = datetime.utcnow().date()
-    booking.check_out_date = (datetime.utcnow() + timedelta(days=2)).date()
-    booking.payment_due_at = datetime.utcnow() + timedelta(hours=1)
+    booking.guest_id = data.get("guestId")
+    booking.host_id = data.get("hostId")
+    booking.listing_id = data.get("listingId")
+    booking.listing_title = data.get("listingTitle")
+    booking.check_in_date = data.get("checkInDate")
+    booking.check_out_date = data.get("checkOutDate")
+    booking.payment_due_at = data.get("paymentDueAt")
     
-    # Mocking to_dict for get_booking
+    # Mocking to_dict for get_booking endpoint
     def _to_dict():
         return data
     booking.to_dict = _to_dict
@@ -248,15 +249,26 @@ def initiate_booking():
             depositAmount = round(total * 0.1, 2)
             amount = total - depositAmount
 
-        call_service("post", "http://booking-detail-service:5012/bookings", {
+        paymentDueAt = (datetime.utcnow() + timedelta(hours=24)).isoformat() + "Z"
+
+        status_init, res_init = call_service("post", "http://booking-detail-service:5012/bookings", {
             "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
             "listingId": listingId, "checkInDate": str(ci), "checkOutDate": str(co),
             "paymentMethodId": paymentMethodId, "bookingMode": bookingMode,
             "status": "AWAITING_PAYMENT", "listingTitle": listingTitle,
             "listingImage": listingImage, "bookingAmount": amount,
             "totalAmount": totalAmount or (amount + depositAmount), 
-            "depositAmount": depositAmount, "guests": guests
+            "depositAmount": depositAmount, "guests": guests,
+            "paymentDueAt": paymentDueAt
         })
+
+        if status_init != 201:
+            print(f"[ERROR] Failed to initialize booking record: {res_init}", flush=True)
+            return jsonify({
+                "code": 500, 
+                "data": None, 
+                "message": f"Failed to persist booking: {res_init.get('message', 'Unknown error')}"
+            }), 500
 
         # Step 5 — Payment Authorization (Stripe hold)
         # Consolidate into a single call with correct keys: bookingAmount and depositAmount
@@ -371,23 +383,7 @@ def initiate_booking():
 
     # Step 5 — Insert Booking
     bookingId = str(uuid.uuid4())
-    booking = Booking(
-        booking_id=bookingId,
-        guest_id=guestId,
-        host_id=hostId,
-        listing_id=listingId,
-        check_in_date=ci,
-        check_out_date=co,
-        payment_method_id=paymentMethodId,
-        hold_id=holdId,
-        booking_mode=bookingMode,
-        status=BOOKING_STATUS_PENDING_HOST,
-        listing_title=listingTitle,
-        listing_image=listingImage,
-        total_amount=totalAmount if totalAmount is not None else amount,
-        guests=guests
-    )
-    call_service("post", "http://booking-detail-service:5012/bookings", {
+    status_code, res = call_service("post", "http://booking-detail-service:5012/bookings", {
         "bookingId": bookingId,
         "guestId": guestId,
         "hostId": hostId,
@@ -403,6 +399,10 @@ def initiate_booking():
         "depositAmount": depositAmount,
         "guests": guests
     })
+
+    if status_code != 201:
+        print(f"[ERROR] Failed to persist booking in detail-service: {res}", flush=True)
+        return jsonify({"code": 500, "data": None, "message": "Failed to persist booking"}), 500
 
     # Step 6/7 — Payment Authorisation (Verify with Gateway)
     paymentIntentId = body.get('paymentIntentId')

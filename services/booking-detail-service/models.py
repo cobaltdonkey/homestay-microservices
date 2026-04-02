@@ -26,5 +26,6 @@ class BookingDetail(db.Model):
     listing_image = db.Column(String(500), nullable=True)
     total_amount = db.Column(Numeric(10, 2), nullable=True)
     guests = db.Column(db.Integer, nullable=True)
+    payment_due_at = db.Column(DateTime, nullable=True)
     created_at = db.Column(DateTime, default=datetime.utcnow)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

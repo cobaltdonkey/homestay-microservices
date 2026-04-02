@@ -16,6 +16,7 @@ interface PendingApproval {
   guests: number;
   total: number;
   expiresIn: { hours: number; minutes: number; seconds: number };
+  paymentDueAt?: string;
 }
 
 
@@ -27,6 +28,22 @@ export function HostDashboardPage() {
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [modalAction, setModalAction] = useState<'approve' | 'reject'>('approve');
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+
+  const calculateTimeRemaining = (targetDate: string) => {
+    const total = Date.parse(targetDate) - Date.now();
+    if (total <= 0) return { hours: 0, minutes: 0, seconds: 0 };
+    
+    const seconds = Math.floor((total / 1000) % 60);
+    const minutes = Math.floor((total / 1000 / 60) % 60);
+    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(total / (1000 * 60 * 60 * 24));
+    
+    return { 
+      hours: hours + (days * 24), 
+      minutes, 
+      seconds 
+    };
+  };
 
   // Fetch real pending approvals from backend
   useEffect(() => {
@@ -50,13 +67,13 @@ export function HostDashboardPage() {
             dates: `${b.checkInDate} – ${b.checkOutDate}`,
             guests: 2,
             total: Number(b.totalAmount ?? 0),
-            expiresIn: { hours: 23, minutes: 59, seconds: 59 },
+            expiresIn: b.paymentDueAt ? calculateTimeRemaining(b.paymentDueAt) : { hours: 24, minutes: 0, seconds: 0 },
+            paymentDueAt: b.paymentDueAt // Store for recalculation
           }));
           setPendingApprovals(mapped);
         }
       } catch (err) {
         console.error('Pending approvals fetch error:', err);
-        // Leave list empty — backend error shows empty state
       }
     };
     fetchPendingApprovals();
@@ -74,37 +91,40 @@ export function HostDashboardPage() {
     const timer = setInterval(() => {
       setPendingApprovals(prev => {
         return prev.map(approval => {
-          const { hours, minutes, seconds } = approval.expiresIn;
-          
-          // Check if expired
-          if (hours === 0 && minutes === 0 && seconds === 0) {
-            // Auto-reject expired requests
-            alert(`Booking request ${approval.bookingId} from ${approval.guestName} has expired.`);
-            return null; // Will be filtered out
+          // If we have the real timestamp, use it to recalculate
+          if (approval.paymentDueAt) {
+            const newRemaining = calculateTimeRemaining(approval.paymentDueAt);
+            
+            // Check if expired
+            if (newRemaining.hours === 0 && newRemaining.minutes === 0 && newRemaining.seconds === 0) {
+              // Note: In a real app, you might want to call the backend to auto-reject here,
+              // but for now we just notify and remove from local state.
+              return null;
+            }
+            
+            return {
+              ...approval,
+              expiresIn: newRemaining
+            };
           }
           
-          // Count down
+          // Fallback to manual countdown for any legacy data
+          const { hours, minutes, seconds } = approval.expiresIn;
+          
+          if (hours === 0 && minutes === 0 && seconds === 0) return null;
+          
           if (seconds > 0) {
-            return {
-              ...approval,
-              expiresIn: { ...approval.expiresIn, seconds: seconds - 1 }
-            };
+            return { ...approval, expiresIn: { ...approval.expiresIn, seconds: seconds - 1 } };
           } else if (minutes > 0) {
-            return {
-              ...approval,
-              expiresIn: { hours, minutes: minutes - 1, seconds: 59 }
-            };
+            return { ...approval, expiresIn: { hours, minutes: minutes - 1, seconds: 59 } };
           } else if (hours > 0) {
-            return {
-              ...approval,
-              expiresIn: { hours: hours - 1, minutes: 59, seconds: 59 }
-            };
+            return { ...approval, expiresIn: { hours: hours - 1, minutes: 59, seconds: 59 } };
           }
           
           return approval;
         }).filter(Boolean) as PendingApproval[];
       });
-    }, 1000); // Update every second
+    }, 1000);
 
     return () => clearInterval(timer);
   }, []);
