@@ -11,6 +11,10 @@ DEMO_MODE = os.environ.get('TWILIO_DEMO_MODE', 'true').lower() == 'true'
 def send_sms(app, to_number, body, event_type, reference_id, recipient_id):
     """Send SMS (demo or live) without database persistence."""
     status = 'SIMULATED'
+    
+    if not to_number:
+        print(f"[SMS ERROR] Cannot send SMS to empty number for {event_type} | ID: {reference_id}", flush=True)
+        return 'FAILED'
 
     if DEMO_MODE:
         print(f"[DEMO SMS] To:{to_number} | Msg:{body}", flush=True)
@@ -28,9 +32,9 @@ def send_sms(app, to_number, body, event_type, reference_id, recipient_id):
                 to=to_number
             )
             status = 'SENT'
-            print(f"[LIVE SMS] Successfully sent to {to_number}", flush=True)
+            print(f"[LIVE SMS][SUCCESS] Message sent to {to_number} for {event_type}", flush=True)
         except Exception as e:
-            print(f"[SMS ERROR] Failed to send message to {to_number}: {str(e)}", flush=True)
+            print(f"[LIVE SMS][ERROR] Failed to send message to {to_number}: {str(e)}", flush=True)
             status = 'FAILED'
 
     return status

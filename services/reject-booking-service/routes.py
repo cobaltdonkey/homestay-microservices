@@ -118,11 +118,18 @@ def reject_booking(bookingId):
     # 6. Call GET to User Service to retrieve guest and host contact details
     guestContact, hostContact = {}, {}
     if guestId:
-        _, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
-        if g_res: guestContact = g_res.get("data", {})
+        g_status, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
+        if g_status == 200 and g_res: 
+            guestContact = g_res.get("data", {})
+        else:
+            print(f"[REJECT-SERVICE][WARNING] Guest details missing for {guestId} (Status: {g_status})", flush=True)
+            
     if hostId:
-        _, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
-        if h_res: hostContact = h_res.get("data", {})
+        h_status, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
+        if h_status == 200 and h_res: 
+            hostContact = h_res.get("data", {})
+        else:
+            print(f"[REJECT-SERVICE][WARNING] Host details missing for {hostId} (Status: {h_status})", flush=True)
 
     # 7. Publish BookingDeclined or BookingExpired event to RabbitMQ
     event_payload = {
@@ -138,6 +145,7 @@ def reject_booking(bookingId):
     }
     
     routing_key = EVENT_BOOKING_DECLINED if status_indication == "REJECTED" else EVENT_BOOKING_EXPIRED
+    print(f"[REJECT-SERVICE] Publishing {routing_key} for booking {bookingId}...", flush=True)
     publish_event(routing_key, event_payload)
 
     # 8. Return 200 OK
