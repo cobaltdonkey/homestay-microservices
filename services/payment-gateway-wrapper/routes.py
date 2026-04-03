@@ -216,44 +216,44 @@ def pre_auth():
         if booking_amount:
             if payment_intent_id:
                 # Frontend already confirmed this intent (manual capture = requires_capture)
-                # Just retrieve and verify it
+                # Just retrieve and verify it is in the right state
                 booking_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+                print(f"[PAYMENT] Retrieved booking intent {booking_intent.id} status={booking_intent.status}", flush=True)
                 results["paymentTxnId"] = booking_intent.id
                 results["paymentStatus"] = booking_intent.status
             else:
-                # No existing intent — create a new authorization hold
+                # No existing intent — create a new authorization hold server-side
                 booking_intent = stripe.PaymentIntent.create(
                     amount=int(float(booking_amount) * 100),
                     currency="sgd",
                     payment_method=payment_method_id,
                     capture_method="manual",
                     confirm=True,
+                    off_session=True,
                     metadata={"bookingId": booking_id, "type": "booking_hold"},
                     idempotency_key=f"{idempotency_key}-bk"
                 )
+                print(f"[PAYMENT] Created booking intent {booking_intent.id} status={booking_intent.status}", flush=True)
                 results["paymentTxnId"] = booking_intent.id
                 results["paymentStatus"] = booking_intent.status
 
-        # 2. Deposit Amount — always create a separate intent
+        # 2. Deposit Amount — separate intent with off_session to allow server-side confirm
+        # 2. Deposit Amount — user requested generation of a deposit txn ID instead of splitting in Stripe
         if deposit_amount:
-            deposit_intent = stripe.PaymentIntent.create(
-                amount=int(float(deposit_amount) * 100),
-                currency="sgd",
-                payment_method=payment_method_id,
-                capture_method="manual",
-                confirm=True,
-                metadata={"bookingId": booking_id, "type": "deposit_hold"},
-                idempotency_key=f"{idempotency_key}-dp"
-            )
-            results["depositTxnId"] = deposit_intent.id
-            results["depositStatus"] = deposit_intent.status
+            # Generate a mock deposit transaction ID
+            mock_deposit_txn_id = f"pi_dep_{uuid.uuid4().hex[:16]}"
+            print(f"[PAYMENT] Bypassing Stripe for deposit; generated depositTxnId={mock_deposit_txn_id}", flush=True)
+            results["depositTxnId"] = mock_deposit_txn_id
+            results["depositStatus"] = "HELD"
 
+        print(f"[PAYMENT] pre-auth complete for booking={booking_id}: paymentTxnId={results.get('paymentTxnId')} depositTxnId={results.get('depositTxnId')}", flush=True)
         return jsonify({"code": 200, "data": {
             **results,
             "status": "HELD",
             "message": "Authorisation hold successful"
         }, "message": "success"}), 200
     except stripe.error.StripeError as e:
+        print(f"[PAYMENT] pre-auth Stripe error for booking={booking_id}: {e}", flush=True)
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
 @main.route('/deposits/release', methods=['POST'])

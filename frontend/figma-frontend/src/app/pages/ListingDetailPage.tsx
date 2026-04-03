@@ -79,19 +79,23 @@ export function ListingDetailPage() {
       if (!id) return;
       try {
         const res = await fetch(`/bookings/listings/${id}/booked-dates`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.code === 200 && Array.isArray(json.data)) {
-            console.log(`[DEBUG] Fetched ${json.data.length} booked ranges for listing ${id}`);
-            const ranges = json.data.map((r: any) => ({
-              start: new Date(r.checkInDate + 'T00:00:00'),
-              end: new Date(r.checkOutDate + 'T00:00:00'),
-            }));
-            setBlockedRanges(ranges);
-          }
+        if (!res.ok) {
+          console.warn(`[booked-dates] Service returned ${res.status}, skipping blocked dates.`);
+          return;
+        }
+        const text = await res.text();
+        if (!text) return;
+        const json = JSON.parse(text);
+        if (json.code === 200 && Array.isArray(json.data)) {
+          console.log(`[DEBUG] Fetched ${json.data.length} booked ranges for listing ${id}`);
+          const ranges = json.data.map((r: any) => ({
+            start: new Date(r.checkInDate + 'T00:00:00'),
+            end: new Date(r.checkOutDate + 'T00:00:00'),
+          }));
+          setBlockedRanges(ranges);
         }
       } catch (err) {
-        console.error('Failed to fetch booked dates:', err);
+        console.warn('Could not fetch booked dates (non-fatal):', err);
       }
     };
     fetchBookedDates();
@@ -207,12 +211,10 @@ export function ListingDetailPage() {
       const checkInStr = checkIn.toISOString().split('T')[0];
       const checkOutStr = checkOut.toISOString().split('T')[0];
       
-      // New flow: Communicate with Availability microservice to create a 120s soft hold
+      // Communicate with Availability microservice to create a 120s soft hold
       const res = await fetch('/availability/hold', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listingId: id,
           guestId: user?.userId || 'anonymous',
@@ -221,8 +223,23 @@ export function ListingDetailPage() {
           ttlSeconds: 120,
         }),
       });
-      
-      const json = await res.json();
+
+      // Guard against empty/non-JSON error responses
+      const rawText = await res.text();
+      if (!rawText) {
+        console.error('Booking service availability check failed: empty response body');
+        alert('Could not verify availability. The service may be starting up — please try again in a moment.');
+        return null;
+      }
+
+      let json: any;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        console.error('Booking service availability check failed: invalid JSON response', rawText);
+        alert('Could not verify availability. Please try again later.');
+        return null;
+      }
       
       if (json.code === 201) {
         console.log('Soft hold successfully created via Availability Service:', {

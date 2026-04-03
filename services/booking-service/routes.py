@@ -172,8 +172,8 @@ def initiate_booking():
                 {"bookingId": bookingId, "depositAmount": depositAmount, "paymentMethodId": paymentMethodId,
                  "idempotencyKey": f"instant-dep-{bookingId}"})
             
-            payment_txn_id = pay_data.get("data", {}).get("paymentTxnId") if pay_status == 200 else None
-            deposit_txn_id = dep_data.get("data", {}).get("depositTxnId") if dep_status == 200 else None
+            payment_txn_id = (pay_data.get("data") or {}).get("paymentTxnId") if pay_status == 200 else None
+            deposit_txn_id = (dep_data.get("data") or {}).get("depositTxnId") if dep_status == 200 else None
 
             call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
                 "paymentTxnId": payment_txn_id, "depositTxnId": deposit_txn_id
@@ -280,8 +280,8 @@ def initiate_booking():
              "paymentIntentId": paymentIntentId, 
              "idempotencyKey": f"req-full-{bookingId}"})
         
-        payment_txn_id = pay_data.get("data", {}).get("paymentTxnId")
-        deposit_txn_id = pay_data.get("data", {}).get("depositTxnId")
+        payment_txn_id = (pay_data.get("data") or {}).get("paymentTxnId")
+        deposit_txn_id = (pay_data.get("data") or {}).get("depositTxnId")
 
         # Step 8 — Update Status (PAYMENT_AUTHORISED)
         call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
@@ -311,8 +311,8 @@ def initiate_booking():
         print(f"[DEBUG] GUEST_ID: {guestId} | STATUS: {s_g} | DATA: {guest_user}", flush=True)
         print(f"[DEBUG] HOST_ID: {hostId} | STATUS: {s_h} | DATA: {host_user}", flush=True)
 
-        guest_details = guest_user.get("data", {}) if guest_user else {}
-        host_details  = host_user.get("data", {}) if host_user else {}
+        guest_details = (guest_user.get("data") or {}) if guest_user else {}
+        host_details  = (host_user.get("data") or {}) if host_user else {}
 
         # Step 14 — Notify
         publish_event("booking.requested", {
@@ -426,7 +426,7 @@ def initiate_booking():
     publish_message("payment.held", {
         "bookingId": bookingId,
         "amount": bookingAmount,
-        "paymentTxnId": auth_data.get("data", {}).get("paymentTxnId", paymentIntentId),
+        "paymentTxnId": (auth_data.get("data") or {}).get("paymentTxnId", paymentIntentId),
         "transactionType": TXN_TYPE_BOOKING_CAPTURE, # It's a hold but for capture later
         "status": "AUTHORIZED"
     })
@@ -447,6 +447,9 @@ def initiate_booking():
     # 2. Fetch host contact
     _, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
     
+    g_data = g_res.get("data") or {} if g_res else {}
+    h_data = h_res.get("data") or {} if h_res else {}
+    
     publish_message("booking.requested", {
         "bookingId": bookingId,
         "guestId": guestId,
@@ -455,12 +458,12 @@ def initiate_booking():
         "checkInDate": str(ci),
         "checkOutDate": str(co),
         "guestContact": {
-            "phoneNumber": g_res.get("data", {}).get("phoneNumber") or "+15005550006", # Fallback
-            "email": g_res.get("data", {}).get("email")
+            "phoneNumber": g_data.get("phoneNumber") or "+15005550006", # Fallback
+            "email": g_data.get("email")
         },
         "hostContact": {
-            "phoneNumber": h_res.get("data", {}).get("phoneNumber") or "+15005550006", # Fallback
-            "email": h_res.get("data", {}).get("email")
+            "phoneNumber": h_data.get("phoneNumber") or "+15005550006", # Fallback
+            "email": h_data.get("email")
         },
         "bookingAmount": bookingAmount,
         "depositAmount": depositAmount
