@@ -75,7 +75,7 @@ def request_hold():
             f"{AVAILABILITY_SERVICE_URL}/holds",
             {"listingId": listingId, "guestId": guestId,
              "checkInDate": checkInDate, "checkOutDate": checkOutDate,
-             "ttlSeconds": 60})
+             "ttlSeconds": 120, "reason": "SOFT_HOLD"})
         
         if status_code != 201:
             return jsonify({"code": 409, "data": {"available": False}, "message": "Could not hold dates"}), 409
@@ -226,7 +226,7 @@ def initiate_booking():
         else:
             # Extend and link existing hold
             call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-                {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+                {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
 
         # Step 4 — Initial Persistence (AWAITING_PAYMENT)
         # Prioritize amounts from the frontend to match the UI precisely
@@ -249,7 +249,7 @@ def initiate_booking():
             depositAmount = round(total * 0.1, 2)
             amount = total - depositAmount
 
-        paymentDueAt = (datetime.utcnow() + timedelta(hours=24)).isoformat() + "Z"
+        paymentDueAt = (datetime.utcnow() + timedelta(minutes=2)).isoformat() + "Z"
 
         status_init, res_init = call_service("post", "http://booking-detail-service:5012/bookings", {
             "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
@@ -296,7 +296,7 @@ def initiate_booking():
 
         # Step 10 — Extend Availability Hold (24h)
         call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+            {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
 
         # Step 11 — Final Status Update (PENDING_HOST)
         call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
@@ -363,7 +363,7 @@ def initiate_booking():
             {"listingId": listingId, "guestId": guestId,
              "checkInDate": checkInDate, "checkOutDate": checkOutDate,
              "bookingId": bookingId,
-             "ttlSeconds": 86400}) # 24h
+             "ttlSeconds": 120}) # 24h reduced to 120s for testing
         if status_code != 201:
             return jsonify({"code": 503, "data": None, "message": "Could not hold dates"}), 503
         holdId = data["data"]["holdId"]
@@ -371,7 +371,7 @@ def initiate_booking():
         # Extend the existing hold (that is about to expire) for 24 hours
         call_service("put",
             f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+            {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
 
     # Step 4 — Calculate amounts
     ci = date.fromisoformat(checkInDate)
@@ -434,7 +434,7 @@ def initiate_booking():
     # Step 10 — Extend Availability Hold (24 hours for host response)
     call_service("put",
         f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-        {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
+        {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
 
     # Step 11 — Update Status to PENDING_HOST
     call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {

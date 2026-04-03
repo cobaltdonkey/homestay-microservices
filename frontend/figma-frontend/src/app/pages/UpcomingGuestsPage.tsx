@@ -14,7 +14,7 @@ export function UpcomingGuestsPage() {
 
       <div className="max-w-[1440px] mx-auto px-6 lg:px-20 py-8">
         {/* Back Arrow */}
-        <button 
+        <button
           onClick={() => navigate('/host/dashboard')}
           className="flex items-center gap-2 text-[#222222] hover:text-[#717171] mb-6 transition-colors"
         >
@@ -28,15 +28,15 @@ export function UpcomingGuestsPage() {
         {/* Guests List */}
         <div className="space-y-6">
           {upcomingGuests.map((guest) => (
-            <div 
+            <div
               key={guest.id}
               className="border border-[#EBEBEB] rounded-xl p-6 hover:shadow-lg transition-shadow"
             >
               <div className="flex gap-6">
                 {/* Listing Image */}
                 <div className="w-48 h-36 flex-shrink-0 rounded-lg overflow-hidden">
-                  <img 
-                    src={guest.listingImage} 
+                  <img
+                    src={guest.listingImage}
                     alt={guest.listingTitle}
                     className="w-full h-full object-cover"
                   />
@@ -47,8 +47,8 @@ export function UpcomingGuestsPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <div className="flex items-center gap-3 mb-2">
-                        <img 
-                          src={guest.guestAvatar} 
+                        <img
+                          src={guest.guestAvatar}
                           alt={guest.guestName}
                           className="w-10 h-10 rounded-full object-cover"
                         />

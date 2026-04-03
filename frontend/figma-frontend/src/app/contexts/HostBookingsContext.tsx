@@ -81,7 +81,6 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
   ]);
 
   const approveBooking = (booking: any) => {
-    // Generate unique ID for approved booking
     const timestamp = Date.now();
     const approvedBooking: HostBooking = {
       id: `upcoming-${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
@@ -98,12 +97,10 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
       status: 'approved',
       approvedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
     };
-
     setUpcomingGuests(prev => [...prev, approvedBooking]);
   };
 
   const rejectBooking = (booking: any, reason?: string) => {
-    // Generate unique ID for rejected booking
     const timestamp = Date.now();
     const rejectedBooking: HostBooking = {
       id: `rejected-${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
@@ -121,7 +118,6 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
       rejectedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       rejectionReason: reason || 'No reason provided',
     };
-
     setRejectedBookings(prev => [...prev, rejectedBooking]);
   };
 

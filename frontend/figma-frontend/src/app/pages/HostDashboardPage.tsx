@@ -40,16 +40,16 @@ export function HostDashboardPage() {
   const calculateTimeRemaining = (targetDate: string) => {
     const total = Date.parse(targetDate) - Date.now();
     if (total <= 0) return { hours: 0, minutes: 0, seconds: 0 };
-    
+
     const seconds = Math.floor((total / 1000) % 60);
     const minutes = Math.floor((total / 1000 / 60) % 60);
     const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
     const days = Math.floor(total / (1000 * 60 * 60 * 24));
-    
-    return { 
-      hours: hours + (days * 24), 
-      minutes, 
-      seconds 
+
+    return {
+      hours: hours + (days * 24),
+      minutes,
+      seconds
     };
   };
 
@@ -142,25 +142,25 @@ export function HostDashboardPage() {
           // If we have the real timestamp, use it to recalculate
           if (approval.paymentDueAt) {
             const newRemaining = calculateTimeRemaining(approval.paymentDueAt);
-            
+
             // Check if expired
             if (newRemaining.hours === 0 && newRemaining.minutes === 0 && newRemaining.seconds === 0) {
               // Note: In a real app, you might want to call the backend to auto-reject here,
               // but for now we just notify and remove from local state.
               return null;
             }
-            
+
             return {
               ...approval,
               expiresIn: newRemaining
             };
           }
-          
+
           // Fallback to manual countdown for any legacy data
           const { hours, minutes, seconds } = approval.expiresIn;
-          
+
           if (hours === 0 && minutes === 0 && seconds === 0) return null;
-          
+
           if (seconds > 0) {
             return { ...approval, expiresIn: { ...approval.expiresIn, seconds: seconds - 1 } };
           } else if (minutes > 0) {
@@ -168,7 +168,7 @@ export function HostDashboardPage() {
           } else if (hours > 0) {
             return { ...approval, expiresIn: { hours: hours - 1, minutes: 59, seconds: 59 } };
           }
-          
+
           return approval;
         }).filter(Boolean) as PendingApproval[];
       });
@@ -245,7 +245,7 @@ export function HostDashboardPage() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-6 gap-6 mb-12">
-          <button 
+          <button
             onClick={() => navigate('/host/active-listings')}
             className="bg-[#FFF5F7] border border-[#FFE5EB] rounded-xl p-6 hover:shadow-lg transition-shadow text-left"
           >
@@ -256,7 +256,7 @@ export function HostDashboardPage() {
             <div className="text-sm text-[#717171]">Active Listings</div>
           </button>
 
-          <button 
+          <button
             onClick={() => navigate('/host/upcoming-guests')}
             className="bg-[#FFF5F7] border border-[#FFE5EB] rounded-xl p-6 hover:shadow-lg transition-shadow text-left"
           >
@@ -267,7 +267,7 @@ export function HostDashboardPage() {
             <div className="text-sm text-[#717171]">Upcoming Guests</div>
           </button>
 
-          <button 
+          <button
             onClick={() => navigate('/host/active-stays')}
             className="bg-[#FFF5F7] border border-[#FFE5EB] rounded-xl p-6 hover:shadow-lg transition-shadow text-left"
           >
@@ -278,7 +278,7 @@ export function HostDashboardPage() {
             <div className="text-sm text-[#717171]">Active Stays</div>
           </button>
 
-          <button 
+          <button
             onClick={() => navigate('/host/past-stays')}
             className="bg-[#FFF5F7] border border-[#FFE5EB] rounded-xl p-6 hover:shadow-lg transition-shadow text-left"
           >
@@ -289,7 +289,7 @@ export function HostDashboardPage() {
             <div className="text-sm text-[#717171]">Past Stays</div>
           </button>
 
-          <button 
+          <button
             onClick={() => navigate('/host/rejected-bookings')}
             className="bg-[#FFF5F7] border border-[#FFE5EB] rounded-xl p-6 hover:shadow-lg transition-shadow text-left"
           >

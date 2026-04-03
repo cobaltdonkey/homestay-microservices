@@ -38,8 +38,11 @@ export function Navbar({ onOpenAuth, onOpenAuthForHost }: NavbarProps) {
   };
 
   const handleLogoClick = () => {
-    navigate('/');
-    // Reset would be handled by the parent component
+    if (isLoggedIn && user?.role === 'host') {
+      navigate('/host/dashboard');
+    } else {
+      navigate('/');
+    }
   };
 
   return (
