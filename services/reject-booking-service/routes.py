@@ -64,8 +64,28 @@ def reject_booking(bookingId):
         else:
             print(f"[REJECT-SERVICE][WARNING] Could not find holdId for booking {bookingId} (Status: {h_status})", flush=True)
 
+    # Step 1.5: If holdId is missing, try to find it by bookingId
+    if not holdId:
+        print(f"[DEBUG] Step 1.5: Looking up hold for booking {bookingId}", flush=True)
+        h_list_status, h_list_data = call_service("get", f"{AVAILABILITY_SERVICE_URL}/holds?bookingId={bookingId}")
+        if h_list_status == 200 and h_list_data.get("data"):
+            # FIX: Key is 'holdId' in the Availability Service to_dict()
+            holdId = h_list_data["data"][0].get("holdId") 
+            print(f"[DEBUG] Found holdId: {holdId}", flush=True)
+
+    # Fallback to values from the DB if not in request body
+    # We must use correct field names from the booking-detail-service response
+    listingId = listingId or booking.get("listingId")
+    guestId = guestId or booking.get("guestId")
+    hostId = hostId or booking.get("hostId")
+    checkInDate = checkInDate or booking.get("checkInDate")
+    checkOutDate = checkOutDate or booking.get("checkOutDate")
+    
+    print(f"[DEBUG] Final IDs: holdId={holdId}, listingId={listingId}, guestId={guestId}, hostId={hostId}", flush=True)
+
     # 2. Call PUT /bookings/{id} on Booking Detail Service to update status
-    put_status, put_data = call_service("put", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{bookingId}", {
+    print(f"[DEBUG] Step 2: Updating booking {bookingId} status to {status_indication}...", flush=True)
+    call_service("put", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{bookingId}", {
         "status": status_indication
     })
     if put_status != 200:
@@ -116,15 +136,24 @@ def reject_booking(bookingId):
             })
 
     # 6. Call GET to User Service to retrieve guest and host contact details
+    print(f"[DEBUG] Step 6: Fetching contacts for guest {guestId} and host {hostId}...", flush=True)
     guestContact, hostContact = {}, {}
     if guestId:
-        _, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
-        if g_res: guestContact = g_res.get("data", {})
+        g_status, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
+        if g_status == 200 and g_res: 
+            guestContact = g_res.get("data", {})
+        else:
+            print(f"[REJECT-SERVICE][WARNING] Guest details missing for {guestId} (Status: {g_status})", flush=True)
+            
     if hostId:
-        _, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
-        if h_res: hostContact = h_res.get("data", {})
+        h_status, h_res = call_service("get", f"{USERS_SERVICE_URL}/users/{hostId}/contact")
+        if h_status == 200 and h_res: 
+            hostContact = h_res.get("data", {})
+        else:
+            print(f"[REJECT-SERVICE][WARNING] Host details missing for {hostId} (Status: {h_status})", flush=True)
 
     # 7. Publish BookingDeclined or BookingExpired event to RabbitMQ
+    print(f"[DEBUG] Step 7: Publishing event...", flush=True)
     event_payload = {
         "bookingId": bookingId,
         "guestId": guestId,
@@ -138,6 +167,7 @@ def reject_booking(bookingId):
     }
     
     routing_key = EVENT_BOOKING_DECLINED if status_indication == "REJECTED" else EVENT_BOOKING_EXPIRED
+    print(f"[REJECT-SERVICE] Publishing {routing_key} for booking {bookingId}...", flush=True)
     publish_event(routing_key, event_payload)
 
     # 8. Return 200 OK

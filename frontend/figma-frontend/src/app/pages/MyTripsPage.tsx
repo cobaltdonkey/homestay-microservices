@@ -21,7 +21,7 @@ interface Booking {
 }
 
 
-type FilterTab = 'upcoming' | 'completed' | 'cancelled';
+type FilterTab = 'pending' | 'upcoming' | 'completed' | 'cancel';
 
 
 export function MyTripsPage() {
@@ -133,16 +133,20 @@ export function MyTripsPage() {
 
   const filterBookings = (bookings: Booking[], tab: FilterTab): Booking[] => {
     switch (tab) {
+      case 'pending':
+        return bookings.filter(b => ['PENDING_HOST', 'AWAITING_PAYMENT'].includes(b.status));
       case 'upcoming':
-        return bookings.filter(b => ['AWAITING_PAYMENT', 'CONFIRMED', 'PAID', 'PENDING_HOST'].includes(b.status));
+        return bookings.filter(b => ['CONFIRMED', 'PAID'].includes(b.status));
       case 'completed':
         return bookings.filter(b => b.status === 'COMPLETED');
-      case 'cancelled':
-        return bookings.filter(b => ['REJECTED', 'EXPIRED', 'FAILED_PAYMENT'].includes(b.status));
+      case 'cancel':
+        return bookings.filter(b => ['REJECTED', 'EXPIRED', 'FAILED_PAYMENT', 'CANCELLED'].includes(b.status));
       default:
         return bookings;
     }
   };
+
+  const getCount = (tab: FilterTab) => filterBookings(bookings, tab).length;
 
   const filteredBookings = filterBookings(bookings, activeTab);
 
@@ -165,15 +169,22 @@ export function MyTripsPage() {
 
         {/* Filter Tabs */}
         <div className="flex gap-6 border-b border-[#EBEBEB] mb-8">
-          {(['upcoming', 'completed', 'cancelled'] as FilterTab[]).map((tab) => (
+          {(['pending', 'upcoming', 'completed', 'cancel'] as FilterTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-4 font-semibold capitalize relative ${
+              className={`pb-4 font-semibold relative flex items-center gap-2 ${
                 activeTab === tab ? 'text-[#222222]' : 'text-[#717171]'
               }`}
             >
-              {tab}
+              <span className="capitalize">{tab}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                activeTab === tab 
+                  ? 'bg-black text-white border-black' 
+                  : 'bg-gray-50 text-[#717171] border-[#EBEBEB]'
+              }`}>
+                {getCount(tab)}
+              </span>
               {activeTab === tab && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF385C]" />
               )}

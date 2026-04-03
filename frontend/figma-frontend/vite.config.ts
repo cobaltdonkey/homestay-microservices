@@ -33,6 +33,8 @@ export default defineConfig({
       '/gateway': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/stays': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/notifications': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/approve-booking': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/reject-booking': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
 })
