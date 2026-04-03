@@ -11,6 +11,30 @@ main = Blueprint('main', __name__)
 def health():
     return jsonify({"status": "ok"}), 200
 
+@main.route('/bookings/listings/<listing_id>/booked-dates', methods=['GET'])
+def get_booked_dates(listing_id):
+    """Return check-in/check-out date ranges for active bookings on a listing."""
+    # Statuses that block availability
+    blocking_statuses = [
+        'CONFIRMED', 'PAYMENT_AUTHORISED', 'PENDING_HOST',
+        'AWAITING_PAYMENT', 'CHECKED_IN'
+    ]
+    bookings = BookingDetail.query.filter(
+        BookingDetail.listing_id == listing_id,
+        BookingDetail.status.in_(blocking_statuses)
+    ).all()
+
+    ranges = [
+        {
+            "checkInDate": str(b.check_in_date) if b.check_in_date else None,
+            "checkOutDate": str(b.check_out_date) if b.check_out_date else None,
+        }
+        for b in bookings
+        if b.check_in_date and b.check_out_date
+    ]
+
+    return jsonify({"code": 200, "data": ranges, "message": "success"}), 200
+
 @main.route('/bookings', methods=['GET'])
 def list_bookings():
     guest_id = request.args.get('guestId')

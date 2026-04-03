@@ -5,7 +5,7 @@ from sqlalchemy import Numeric, String, Date, DateTime
 
 class BookingDetail(db.Model):
     __tablename__ = 'booking'
-    __table_args__ = {'schema': 'booking_db', 'extend_existing': True}
+    __table_args__ = {'schema': 'booking', 'extend_existing': True}
 
     booking_id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     status = db.Column(String(30))

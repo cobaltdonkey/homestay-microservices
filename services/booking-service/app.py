@@ -9,14 +9,11 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__)
-    
-
 
     from routes import bp
-    # Use url_prefix to cleanly handle all /bookings requests
-    app.register_blueprint(bp, url_prefix='/bookings')
-    # Also register it without a prefix for routes that don't have it (like root /health)
-    app.register_blueprint(bp, name='main_root')
+    # Register blueprint once at root - routes.py already declares both
+    # @bp.route('/bookings/...') and @bp.route('/...') decorators on each handler
+    app.register_blueprint(bp)
 
     return app
 

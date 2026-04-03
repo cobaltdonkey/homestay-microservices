@@ -46,6 +46,16 @@ def create_app():
     db.init_app(app)
     app.register_blueprint(main)
 
+    with app.app_context():
+        from sqlalchemy import text
+        try:
+            db.session.execute(text("CREATE SCHEMA IF NOT EXISTS availability_db"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        db.create_all()
+        print("[STARTUP] availability-service: DB tables ensured.", flush=True)
+
     # Start the background background cleanup thread
     cleanup_thread = threading.Thread(target=run_cleanup, args=(app,), daemon=True)
     cleanup_thread.start()

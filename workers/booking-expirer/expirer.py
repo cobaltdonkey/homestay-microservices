@@ -35,7 +35,7 @@ def run_cycle(engine):
 
         # Cycle 1 — payment timeouts (AWAITING_PAYMENT past due)
         result = conn.execute(text(
-            "SELECT booking_id FROM booking "
+            "SELECT booking_id FROM booking.booking "
             "WHERE status='AWAITING_PAYMENT' "
             "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
@@ -50,7 +50,7 @@ def run_cycle(engine):
 
         # Cycle 2 — host response timeouts (PENDING_HOST past due)
         result = conn.execute(text(
-            "SELECT booking_id FROM booking_db.booking "
+            "SELECT booking_id FROM booking.booking "
             "WHERE status='PENDING_HOST' "
             "AND payment_due_at < CURRENT_TIMESTAMP "
             "LIMIT 100"
