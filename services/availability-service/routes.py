@@ -220,15 +220,19 @@ def confirm_hold(hold_id):
 @main.route('/availability/holds/<string:hold_id>', methods=['DELETE'])
 @main.route('/holds/<string:hold_id>', methods=['DELETE'])
 def delete_hold(hold_id):
+    print(f"[AVAILABILITY] Deleting hold {hold_id}", flush=True)
     hold = Hold.query.get(hold_id)
     if not hold:
+        print(f"[AVAILABILITY] Hold {hold_id} not found for deletion", flush=True)
         return jsonify({"code": 404, "data": {}, "message": "Hold not found"}), 404
 
     try:
         db.session.delete(hold)
         db.session.commit()
+        print(f"[AVAILABILITY] Successfully deleted hold {hold_id}", flush=True)
     except Exception as e:
         db.session.rollback()
+        print(f"[AVAILABILITY] Error deleting hold {hold_id}: {e}", flush=True)
         return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
 
     return jsonify({
@@ -277,6 +281,21 @@ def create_reservation():
         "data": new_reservation.to_dict(),
         "message": "Reservation created successfully"
     }), 201
+
+@main.route('/holds/booking/<string:booking_id>', methods=['GET'])
+@main.route('/availability/holds/booking/<string:booking_id>', methods=['GET'])
+def get_hold_by_booking(booking_id):
+    print(f"[AVAILABILITY] Fetching hold for booking {booking_id}", flush=True)
+    hold = Hold.query.filter_by(booking_id=booking_id).first()
+    if not hold:
+        print(f"[AVAILABILITY] No hold found for booking {booking_id}", flush=True)
+        return jsonify({"code": 404, "data": {}, "message": "Hold not found"}), 404
+
+    return jsonify({
+        "code": 200,
+        "data": hold.to_dict(),
+        "message": "success"
+    }), 200
 
 @main.route('/reservations/booking/<string:booking_id>', methods=['DELETE'])
 def delete_reservation_by_booking(booking_id):

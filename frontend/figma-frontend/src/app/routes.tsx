@@ -14,6 +14,7 @@ import { ActiveListingsPage } from "./pages/ActiveListingsPage";
 import { UpcomingGuestsPage } from "./pages/UpcomingGuestsPage";
 import { RejectedBookingsPage } from "./pages/RejectedBookingsPage";
 import { PastStaysPage } from "./pages/PastStaysPage";
+import { DeclineConfirmedPage } from "./pages/DeclineConfirmedPage";
 
 export const router = createBrowserRouter([
   {
@@ -79,5 +80,9 @@ export const router = createBrowserRouter([
   {
     path: "/host/past-stays",
     Component: PastStaysPage,
+  },
+  {
+    path: "/host/declined/:id",
+    Component: DeclineConfirmedPage,
   },
 ]);

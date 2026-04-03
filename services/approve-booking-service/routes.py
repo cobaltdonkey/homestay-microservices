@@ -16,15 +16,13 @@ bp = Blueprint('main', __name__)
 def health():
     return jsonify({"status": "ok", "service": "approve-booking-service"}), 200
 
-@bp.route('/approve/<bookingId>', methods=['POST'])
+@bp.route('/approve/<bookingId>', methods=['POST', 'OPTIONS'])
 def approve_booking(bookingId):
+    # Handle CORS preflight explicitly if needed by frontend
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
     body = request.get_json() or {}
-    holdId = body.get('holdId')
-    listingId = body.get('listingId')
-    guestId = body.get('guestId')
-    hostId = body.get('hostId')
-    checkInDate = body.get('checkInDate')
-    checkOutDate = body.get('checkOutDate')
 
     # Step 1: Call GET /bookings/{id} on Booking Detail Service
     b_status, b_data = call_service("get", f"http://booking-detail-service:5012/bookings/{bookingId}")
@@ -32,10 +30,29 @@ def approve_booking(bookingId):
         return jsonify({"error": "Booking not found"}), 404
         
     booking = b_data.get("data", {})
+    current_status = booking.get("status")
+    
+    # 2. Validate current status
+    if current_status != "PENDING_HOST":
+        return jsonify({"error": f"Invalid booking status: {current_status}. Must be PENDING_HOST."}), 400
+
     paymentTxnId = booking.get("paymentTxnId")
     depositTxnId = booking.get("depositTxnId")
     bookingAmount = booking.get("bookingAmount")
     depositAmount = booking.get("depositAmount")
+
+    # Self-hydrate
+    guestId = body.get("guestId") or booking.get("guestId")
+    hostId = body.get("hostId") or booking.get("hostId")
+    listingId = body.get("listingId") or booking.get("listingId")
+    checkInDate = body.get("checkInDate") or booking.get("checkInDate")
+    checkOutDate = body.get("checkOutDate") or booking.get("checkOutDate")
+
+    # Fetch holdId
+    holdId = body.get("holdId")
+    if not holdId:
+        _, h_data = call_service("get", f"{AVAILABILITY_SERVICE_URL}/holds/booking/{bookingId}")
+        holdId = (h_data.get("data") or {}).get("hold_id")
 
     # Step 2: Call PUT /availability/hold/{holdId} on Availability Service to re-extend by 15 mins (900 seconds)
     h_status, h_data = call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend", {"ttlSeconds": 900})

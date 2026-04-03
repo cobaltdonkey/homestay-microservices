@@ -20,6 +20,25 @@ def health():
         "message": "success"
     }), 200
 
+@main.route('/', methods=['GET'])
+@main.route('/stays', methods=['GET'])
+def list_stays():
+    host_id = request.args.get('hostId')
+    guest_id = request.args.get('guestId')
+    
+    query = Stay.query
+    if host_id:
+        query = query.filter_by(host_id=host_id)
+    if guest_id:
+        query = query.filter_by(guest_id=guest_id)
+        
+    stays = query.order_by(Stay.check_in_date.desc()).all()
+    return jsonify({
+        "code": 200,
+        "data": [s.to_dict() for s in stays],
+        "message": "success"
+    }), 200
+
 @main.route('/', methods=['POST'])
 @main.route('/stays', methods=['POST'])
 def create_stay():

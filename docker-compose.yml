@@ -81,6 +81,8 @@ services:
         condition: service_completed_successfully
     networks:
       - airbnb-net
+    volumes:
+      - ./services/booking-detail-service:/app
     expose:
       - "5012"
 
@@ -121,6 +123,8 @@ services:
         condition: service_completed_successfully
     networks:
       - airbnb-net
+    volumes:
+      - ./services/reject-booking-service:/app
     expose:
       - "5014"
 
@@ -267,10 +271,11 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
-    volumes:
-      - ./services/shared:/app/shared
     networks:
       - airbnb-net
+    volumes:
+      - ./services/shared:/app/shared
+      - ./services/payment-logs-service:/app
     expose:
       - "5008"
 
@@ -311,10 +316,11 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
-    volumes:
-      - ./services/shared:/app/shared
     networks:
       - airbnb-net
+    volumes:
+      - ./services/shared:/app/shared
+      - ./services/payment-gateway-wrapper:/app
     expose:
       - "5010"
 
@@ -355,8 +361,10 @@ services:
     environment:
       DATABASE_URL: ${BOOKING_EXPIRER_DB_URL}
       BOOKING_SERVICE_URL: http://booking-service:5001
+      REJECT_BOOKING_SERVICE_URL: http://reject-booking-service:5014
     depends_on:
       - booking-service
+      - reject-booking-service
     networks:
       - airbnb-net
     restart: unless-stopped

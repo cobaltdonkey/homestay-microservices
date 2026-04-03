@@ -116,6 +116,24 @@ services:
         methods: ["GET"]
         strip_path: false
 
+  - name: approve-booking-service
+    url: http://approve-booking-service:5013
+    routes:
+      - name: approve-booking-route
+        paths:
+          - /approve
+        methods: ["POST", "OPTIONS"]
+        strip_path: false
+
+  - name: reject-booking-service
+    url: http://reject-booking-service:5014
+    routes:
+      - name: reject-booking-route
+        paths:
+          - /reject
+        methods: ["POST", "OPTIONS", "GET" , "PUT" , "DELETE"]
+        strip_path: false
+
 
 plugins:
   - name: correlation-id

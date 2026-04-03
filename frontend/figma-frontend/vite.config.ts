@@ -28,6 +28,8 @@ export default defineConfig({
       '/search': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/availability': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/bookings': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/approve': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/reject': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/gateway': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/stays': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/notifications': { target: 'http://127.0.0.1:8000', changeOrigin: true },

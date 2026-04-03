@@ -183,14 +183,14 @@ export function HostDashboardPage() {
     if (selectedApproval) {
       try {
         const endpoint = action === 'approve'
-          ? `/bookings/${selectedApproval.bookingId}/approve`
-          : `/bookings/${selectedApproval.bookingId}/reject`;
+          ? `/approve/${selectedApproval.bookingId}`
+          : `/reject/${selectedApproval.bookingId}`;
         const body = action === 'reject' && reason ? { reason } : undefined;
 
         const res = await fetch(endpoint, {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined,
+          body: JSON.stringify(body || {}),
         });
         const json = await res.json();
         if (json.code === 200 || res.ok) {
@@ -199,7 +199,7 @@ export function HostDashboardPage() {
             alert(`Booking ${selectedApproval.bookingId} approved! Guest has been notified.`);
           } else {
             rejectBooking(selectedApproval, reason);
-            alert(`Booking ${selectedApproval.bookingId} declined. Guest has been notified.`);
+            navigate(`/host/declined/${selectedApproval.bookingId}`);
           }
           setPendingApprovals(prev => prev.filter(a => a.id !== selectedApproval.id));
         } else {
