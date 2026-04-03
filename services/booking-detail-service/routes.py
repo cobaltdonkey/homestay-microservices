@@ -38,9 +38,16 @@ def get_booked_dates(listing_id):
 @main.route('/bookings', methods=['GET'])
 def list_bookings():
     guest_id = request.args.get('guestId')
+    host_id = request.args.get('hostId')
+    status = request.args.get('status')
+    
     query = BookingDetail.query
     if guest_id:
         query = query.filter_by(guest_id=guest_id)
+    if host_id:
+        query = query.filter_by(host_id=host_id)
+    if status:
+        query = query.filter_by(status=status)
     
     bookings = query.order_by(BookingDetail.created_at.desc()).all()
     
@@ -113,8 +120,14 @@ def get_booking(id):
         "data": {
             "bookingId": booking.booking_id,
             "status": booking.status,
+            "guestId": booking.guest_id,
+            "hostId": booking.host_id,
+            "listingId": booking.listing_id,
             "paymentTxnId": booking.payment_txn_id,
             "depositTxnId": booking.deposit_txn_id,
+            "guestId": booking.guest_id,
+            "hostId": booking.host_id,
+            "listingId": booking.listing_id,
             "listingTitle": booking.listing_title,
             "listingImage": booking.listing_image,
             "checkInDate": str(booking.check_in_date) if booking.check_in_date else None,

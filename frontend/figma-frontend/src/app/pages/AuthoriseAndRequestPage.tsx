@@ -4,6 +4,7 @@ import { Navbar } from '../components/Navbar';
 import { ArrowLeft, Star, AlertCircle, Clock, CreditCard, Lock } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { formatDateToYYYYMMDD } from '../../utils/dateUtils';
 
 const stripePromise = loadStripe((import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY);
 
@@ -47,9 +48,9 @@ function AuthoriseAndRequestPageInner() {
     deposit: 200,
   };
 
-  // Format dates to YYYY-MM-DD for the backend
-  const checkIn: string = routeState.checkIn ? new Date(routeState.checkIn).toISOString().split('T')[0] : '';
-  const checkOut: string = routeState.checkOut ? new Date(routeState.checkOut).toISOString().split('T')[0] : '';
+  // Format dates to YYYY-MM-DD for the backend using local time
+  const checkIn: string = formatDateToYYYYMMDD(routeState.checkIn ? new Date(routeState.checkIn) : null);
+  const checkOut: string = formatDateToYYYYMMDD(routeState.checkOut ? new Date(routeState.checkOut) : null);
   const total = routeState.price * (routeState.nights || 1) + listing.cleaningFee + listing.deposit;
   const splitAmount = total / 2;
 

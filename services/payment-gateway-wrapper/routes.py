@@ -4,7 +4,11 @@ from flask import Blueprint, request, jsonify
 
 main = Blueprint('main', __name__)
 
-DEMO_MODE = os.environ.get('STRIPE_DEMO_MODE', 'true').lower() == 'true'
+def is_true(val):
+    if not val: return False
+    return str(val).strip().lower() in ('true', '1', 't', 'y', 'yes')
+
+DEMO_MODE = is_true(os.environ.get('STRIPE_DEMO_MODE', 'true'))
 
 if not DEMO_MODE:
     import stripe
@@ -71,11 +75,12 @@ def capture():
     booking_id = data.get('bookingId')
     amount = data.get('amount')
     payment_method_id = data.get('paymentMethodId')
-    payment_intent_id = data.get('paymentIntentId') # New: confirm an existing intent
+    # Support both 'paymentIntentId' and 'paymentTxnId' for compatibility
+    payment_intent_id = data.get('paymentIntentId') or data.get('paymentTxnId')
     idempotency_key = data.get('idempotencyKey')
 
     if not any([payment_method_id, payment_intent_id]):
-         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentIntentId"}), 400
+         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentTxnId"}), 400
 
     if DEMO_MODE:
         print(f"[DEMO] Stripe call simulated: capture booking={booking_id} amount={amount}", flush=True)
@@ -89,6 +94,12 @@ def capture():
             # If we already have a payment intent confirmed on client, we just retrieve/verify it
             intent = stripe.PaymentIntent.retrieve(payment_intent_id)
             if intent.status == 'succeeded':
+                return jsonify({"code": 200, "data": {
+                    "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
+                }, "message": "success"}), 200
+            elif intent.status == 'requires_capture':
+                # Actually trigger the capture
+                intent = stripe.PaymentIntent.capture(payment_intent_id)
                 return jsonify({"code": 200, "data": {
                     "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
                 }, "message": "success"}), 200
@@ -159,30 +170,7 @@ def authorise():
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
-@main.route('/void', methods=['POST'])
-@main.route('/gateway/void', methods=['POST'])
-def void():
-    data = request.json or {}
-    payment_txn_id = data.get('paymentTxnId')
-    reason = data.get('reason', '')
-    idempotency_key = data.get('idempotencyKey')
 
-    if not all([payment_txn_id, idempotency_key]):
-        return jsonify({"code": 400, "data": {}, "message": "Missing required fields"}), 400
-
-    if DEMO_MODE:
-        print(f"[DEMO] Stripe call simulated: void txnId={payment_txn_id} reason={reason}", flush=True)
-        return jsonify({"code": 200, "data": {
-            "paymentTxnId": payment_txn_id, "status": "VOIDED"
-        }, "message": "success"}), 200
-
-    try:
-        stripe.PaymentIntent.cancel(payment_txn_id, idempotency_key=idempotency_key)
-        return jsonify({"code": 200, "data": {
-            "paymentTxnId": payment_txn_id, "status": "VOIDED"
-        }, "message": "success"}), 200
-    except stripe.error.StripeError as e:
-        return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
 @main.route('/pre-auth', methods=['POST'])
 @main.route('/gateway/pre-auth', methods=['POST'])
@@ -257,6 +245,7 @@ def pre_auth():
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
 
 @main.route('/deposits/release', methods=['POST'])
+@main.route('/gateway/release-deposit', methods=['POST'])
 @main.route('/gateway/deposits/release', methods=['POST'])
 def release_deposit():
     data = request.json or {}
@@ -303,5 +292,45 @@ def capture_deposit():
         return jsonify({"code": 200, "data": {
             "depositTxnId": deposit_txn_id, "status": "CAPTURED"
         }, "message": "success"}), 200
+    except stripe.error.StripeError as e:
+        return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
+
+@main.route('/void', methods=['POST'])
+@main.route('/gateway/void', methods=['POST'])
+def void_payment():
+    data = request.json or {}
+    payment_txn_id = data.get('paymentTxnId')
+    deposit_txn_id = data.get('depositTxnId')
+    reason = data.get('reason', '')
+    idempotency_key = data.get('idempotencyKey')
+
+    if not idempotency_key:
+        return jsonify({"code": 400, "data": {}, "message": "Missing idempotencyKey"}), 400
+
+    results = {"paymentStatus": "VOIDED"}
+    
+    try:
+        # 1. Void Main Booking Payment
+        if payment_txn_id:
+            if DEMO_MODE:
+                print(f"[DEMO] Stripe simulated: Voiding payment {payment_txn_id}", flush=True)
+            else:
+                stripe.PaymentIntent.cancel(payment_txn_id, idempotency_key=f"{idempotency_key}-pv")
+            results["paymentTxnId"] = payment_txn_id
+
+        # 2. Void Security Deposit hold
+        if deposit_txn_id:
+            if DEMO_MODE:
+                print(f"[DEMO] Stripe simulated: Releasing deposit {deposit_txn_id}", flush=True)
+            else:
+                # If it's a real pi_..., cancel it. If it's a mock pi_dep_..., just simulate.
+                if deposit_txn_id.startswith("pi_dep_") or DEMO_MODE:
+                     print(f"[GATEWAY] Releasing generated deposit hold {deposit_txn_id}", flush=True)
+                else:
+                    stripe.PaymentIntent.cancel(deposit_txn_id, idempotency_key=f"{idempotency_key}-dv")
+            results["depositTxnId"] = deposit_txn_id
+
+        return jsonify({"code": 200, "data": results, "message": "success"}), 200
+
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402

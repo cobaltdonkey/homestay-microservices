@@ -4,6 +4,7 @@ import { Navbar } from '../components/Navbar';
 import { AuthModal } from '../components/AuthModal';
 import { BookingPanelCalendar } from '../components/BookingPanelCalendar';
 import { useAuth } from '../contexts/AuthContext';
+import { formatDateToYYYYMMDD } from '../../utils/dateUtils';
 import { supabase } from '../../utils/supabase';
 import {
   Star,
@@ -208,8 +209,8 @@ export function ListingDetailPage() {
     }
 
     try {
-      const checkInStr = checkIn.toISOString().split('T')[0];
-      const checkOutStr = checkOut.toISOString().split('T')[0];
+      const checkInStr = formatDateToYYYYMMDD(checkIn);
+      const checkOutStr = formatDateToYYYYMMDD(checkOut);
       
       // Communicate with Availability microservice to create a 120s soft hold
       const res = await fetch('/availability/hold', {
