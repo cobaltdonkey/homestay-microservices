@@ -11,6 +11,7 @@ if DATABASE_URL and "sslmode" not in DATABASE_URL:
     DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
 
 BOOKING_SERVICE_URL = os.environ.get("BOOKING_SERVICE_URL", "http://booking-service:5001")
+REJECT_BOOKING_SERVICE_URL = os.environ.get("REJECT_BOOKING_SERVICE_URL", "http://reject-booking-service:5014")
 
 
 def wait_for_db():
@@ -58,7 +59,8 @@ def run_cycle(engine):
         for row in result.fetchall():
             bid = row[0]
             try:
-                r = requests.post(f"{BOOKING_SERVICE_URL}/bookings/{bid}/expire", timeout=10)
+                # Direct call to reject-booking-service with status='EXPIRED'
+                r = requests.post(f"{REJECT_BOOKING_SERVICE_URL}/reject/{bid}", json={"status": "EXPIRED"}, timeout=10)
                 print(f"[EXPIRER] Expired {bid}: {r.status_code}", flush=True)
             except Exception as e:
                 print(f"[EXPIRER] Error for {bid}: {e}", flush=True)

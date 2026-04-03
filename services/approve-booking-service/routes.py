@@ -17,15 +17,13 @@ bp = Blueprint('main', __name__)
 def health():
     return jsonify({"status": "ok", "service": "approve-booking-service"}), 200
 
-@bp.route('/<bookingId>', methods=['POST'])
+@bp.route('/approve/<bookingId>', methods=['POST', 'OPTIONS'])
 def approve_booking(bookingId):
+    # Handle CORS preflight explicitly if needed by frontend
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
     body = request.get_json() or {}
-    holdId = body.get('holdId')
-    listingId = body.get('listingId')
-    guestId = body.get('guestId')
-    hostId = body.get('hostId')
-    checkInDate = body.get('checkInDate')
-    checkOutDate = body.get('checkOutDate')
 
     # Step 1: Call GET /bookings/{id} on Booking Detail Service
     print(f"[DEBUG] Step 1: Fetching booking {bookingId} from {BOOKING_DETAIL_SERVICE_URL}...", flush=True)

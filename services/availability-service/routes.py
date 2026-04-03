@@ -246,15 +246,19 @@ def list_holds():
 @main.route('/availability/holds/<string:hold_id>', methods=['DELETE'])
 @main.route('/holds/<string:hold_id>', methods=['DELETE'])
 def delete_hold(hold_id):
+    print(f"[AVAILABILITY] Deleting hold {hold_id}", flush=True)
     hold = Hold.query.get(hold_id)
     if not hold:
+        print(f"[AVAILABILITY] Hold {hold_id} not found for deletion", flush=True)
         return jsonify({"code": 404, "data": {}, "message": "Hold not found"}), 404
 
     try:
         db.session.delete(hold)
         db.session.commit()
+        print(f"[AVAILABILITY] Successfully deleted hold {hold_id}", flush=True)
     except Exception as e:
         db.session.rollback()
+        print(f"[AVAILABILITY] Error deleting hold {hold_id}: {e}", flush=True)
         return jsonify({"code": 500, "data": {}, "message": str(e)}), 500
 
     return jsonify({

@@ -40,7 +40,7 @@ def send_sms(app, to_number, body, event_type, reference_id, recipient_id):
             status = 'SENT'
             print(f"[LIVE SMS] Successfully sent! SID: {msg.sid} | To: {to_number}", flush=True)
         except Exception as e:
-            print(f"[SMS ERROR] Failed to send message to {to_number}: {str(e)}", flush=True)
+            print(f"[LIVE SMS][ERROR] Failed to send message to {to_number}: {str(e)}", flush=True)
             status = 'FAILED'
 
     return status

@@ -18,8 +18,21 @@ def start_consumer(app):
                 parameters = pika.URLParameters(RABBITMQ_URL)
                 connection = pika.BlockingConnection(parameters)
                 channel = connection.channel()
-                
+
+                # Declare exchange
+                channel.exchange_declare(
+                    exchange='booking_events',
+                    exchange_type='topic',
+                    durable=True
+                )
+
                 queue_name = 'payment_logs_queue'
+                # Set up payment_logs_queue
+                channel.queue_declare(queue=queue_name, durable=True)
+                
+                # Bind for both payment and deposit events
+                channel.queue_bind(exchange='booking_events', queue=queue_name, routing_key='payment.*')
+                channel.queue_bind(exchange='booking_events', queue=queue_name, routing_key='deposit.*')
                 
                 def callback(ch, method, properties, body):
                     print(f"Received message: {method.routing_key} {body}", flush=True)
@@ -57,6 +70,14 @@ def start_consumer(app):
                             deposit_txn_id = data.get('depositTxnId')
                             deposit_amount = data.get('depositAmount') or data.get('amount', 0)
                             status = 'HELD'
+                        elif routing_key == 'payment.voided':
+                            transaction_type = 'PAYMENT_VOID'
+                            payment_txn_id = data.get('paymentTxnId')
+                            status = 'VOIDED'
+                        elif routing_key == 'deposit.released':
+                            transaction_type = 'DEPOSIT_RELEASE'
+                            deposit_txn_id = data.get('depositTxnId')
+                            status = 'RELEASED'
                         elif routing_key == 'payment.error':
                             transaction_type = 'PAYMENT_FAILED'
                             payment_txn_id = data.get('paymentTxnId', 'ERROR')
@@ -93,8 +114,10 @@ def start_consumer(app):
                     except Exception as e:
                         db.session.rollback()
                         print(f"Error processing message: {e}", flush=True)
+                    finally:
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
                 
-                channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+                channel.basic_consume(queue=queue_name, on_message_callback=callback)
                 print("Starting consume loop...", flush=True)
                 channel.start_consuming()
             except pika.exceptions.AMQPConnectionError as e:

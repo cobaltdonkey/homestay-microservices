@@ -217,7 +217,7 @@ export function HostDashboardPage() {
             alert(`Booking ${selectedApproval.bookingId} approved! Guest has been notified.`);
           } else {
             rejectBooking(selectedApproval, reason);
-            alert(`Booking ${selectedApproval.bookingId} declined. Guest has been notified.`);
+            navigate(`/host/declined/${selectedApproval.bookingId}`);
           }
           setPendingApprovals(prev => prev.filter(a => a.id !== selectedApproval.id));
         } else {
