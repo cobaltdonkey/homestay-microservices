@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../../utils/supabase';
 import { useNavigate, useLocation } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { ApprovalRequestCard } from '../components/ApprovalRequestCard';
@@ -28,6 +29,8 @@ export function HostDashboardPage() {
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [modalAction, setModalAction] = useState<'approve' | 'reject'>('approve');
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  const [activeListingsCount, setActiveListingsCount] = useState<number>(0);
+  const [activeStaysCount, setActiveStaysCount] = useState<number>(0);
 
   const calculateTimeRemaining = (targetDate: string) => {
     const total = Date.parse(targetDate) - Date.now();
@@ -76,7 +79,42 @@ export function HostDashboardPage() {
         console.error('Pending approvals fetch error:', err);
       }
     };
+
+    const fetchRealCounts = async () => {
+      const storedUser = localStorage.getItem('secondhome_user');
+      const currentUser = storedUser ? JSON.parse(storedUser) : null;
+      if (!currentUser?.userId) return;
+
+      try {
+        // 1. Fetch real active listings count from Supabase
+        const { count, error } = await supabase
+          .schema('listings_db')
+          .from('property_details')
+          .select('*', { count: 'exact', head: true })
+          .eq('host_id', currentUser.userId)
+          .eq('status', 'ACTIVE');
+
+        if (!error && count !== null) {
+          setActiveListingsCount(count);
+        }
+
+        // 2. Fetch active stays count from /stays API/DB if available?
+        // For now, focusing on the listings as requested
+        const staysRes = await fetch(`/stays?hostId=${currentUser.userId}&status=ACTIVE`);
+        if (staysRes.ok) {
+          const json = await staysRes.json();
+          if (json.code === 200 && Array.isArray(json.data)) {
+            setActiveStaysCount(json.data.length);
+          }
+        }
+
+      } catch (err) {
+        console.warn('Failed to fetch real counts', err);
+      }
+    };
+
     fetchPendingApprovals();
+    fetchRealCounts();
   }, []);
 
   // Check if user came from dropdown menu
@@ -196,7 +234,7 @@ export function HostDashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <Building2 className="w-8 h-8 text-[#FF385C]" />
             </div>
-            <div className="text-3xl font-bold text-[#222222] mb-1">3</div>
+            <div className="text-3xl font-bold text-[#222222] mb-1">{activeListingsCount}</div>
             <div className="text-sm text-[#717171]">Active Listings</div>
           </button>
 
@@ -218,7 +256,7 @@ export function HostDashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <Home className="w-8 h-8 text-[#FF385C]" />
             </div>
-            <div className="text-3xl font-bold text-[#222222] mb-1">1</div>
+            <div className="text-3xl font-bold text-[#222222] mb-1">{activeStaysCount}</div>
             <div className="text-sm text-[#717171]">Active Stays</div>
           </button>
 
