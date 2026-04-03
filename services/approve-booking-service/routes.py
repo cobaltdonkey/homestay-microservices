@@ -18,6 +18,7 @@ def health():
     return jsonify({"status": "ok", "service": "approve-booking-service"}), 200
 
 @bp.route('/approve/<bookingId>', methods=['POST', 'OPTIONS'])
+@bp.route('/<bookingId>', methods=['POST', 'OPTIONS'])
 def approve_booking(bookingId):
     # Handle CORS preflight explicitly if needed by frontend
     if request.method == 'OPTIONS':
@@ -38,12 +39,12 @@ def approve_booking(bookingId):
 
     # Fallback to values from the DB if not in request body
     # This is CRITICAL if the Frontend doesn't pass them in the POST body.
-    holdId = holdId or booking.get("holdId")
-    listingId = listingId or booking.get("listingId")
-    guestId = guestId or booking.get("guestId")
-    hostId = hostId or booking.get("hostId")
-    checkInDate = checkInDate or booking.get("checkInDate")
-    checkOutDate = checkOutDate or booking.get("checkOutDate")
+    holdId = body.get("holdId") or booking.get("holdId")
+    listingId = body.get("listingId") or booking.get("listingId")
+    guestId = body.get("guestId") or booking.get("guestId")
+    hostId = body.get("hostId") or booking.get("hostId")
+    checkInDate = body.get("checkInDate") or booking.get("checkInDate")
+    checkOutDate = body.get("checkOutDate") or booking.get("checkOutDate")
 
     print(f"[DEBUG] IDs: holdId={holdId}, listingId={listingId}, guestId={guestId}, hostId={hostId}", flush=True)
     print(f"[DEBUG] Dates: checkIn={checkInDate}, checkOut={checkOutDate}", flush=True)
@@ -82,7 +83,7 @@ def approve_booking(bookingId):
         return jsonify({"code": 404, "error": "No active hold found for this booking. Approval aborted."}), 404
 
     # Step 3: Re-extend the hold to secure the dates for an additional 15 minutes (900 seconds)
-    h_status, h_data = call_service("put", f"{AVAILABILITY_SERVICE_URL}/availability/holds/{holdId}/extend", {"ttlSeconds": 900})
+    h_status, h_data = call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend", {"ttlSeconds": 900})
     
     # Step 3 & 4 Validation:
     # If 404, the hold has already expired. We abort.
