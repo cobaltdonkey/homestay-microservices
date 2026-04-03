@@ -55,10 +55,20 @@ def start_consumer(app):
                             payment_txn_id = data.get('paymentTxnId')
                             amount = data.get('bookingAmount', 0)
                             status = 'AUTHORIZED'
+                        elif routing_key == 'payment.captured':
+                            transaction_type = 'BOOKING_PAYMENT_CAPTURE'
+                            payment_txn_id = data.get('paymentTxnId')
+                            amount = data.get('amount') or data.get('bookingAmount', 0)
+                            status = 'SUCCESS'
                         elif routing_key == 'deposit.preauthorised':
                             transaction_type = 'DEPOSIT_PREAUTHORIZE'
                             deposit_txn_id = data.get('depositTxnId')
                             deposit_amount = data.get('depositAmount', 0)
+                            status = 'HELD'
+                        elif routing_key == 'deposit.held':
+                            transaction_type = 'DEPOSIT_PREAUTHORIZE' # Keep same type as preauth but update status to HELD/SECURED
+                            deposit_txn_id = data.get('depositTxnId')
+                            deposit_amount = data.get('depositAmount') or data.get('amount', 0)
                             status = 'HELD'
                         elif routing_key == 'payment.voided':
                             transaction_type = 'PAYMENT_VOID'

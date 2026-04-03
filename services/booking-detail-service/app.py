@@ -24,11 +24,16 @@ def create_app():
     # Ensure scheme/table + column creation
     with app.app_context():
         import models
-        db.create_all()
-        # In SQLAlchemy if columns don't exist it doesn't add them. I should try to raw execute alter table if needed, but the prompt says just make it run and it's a new database context.
-        # But wait, existing booking table won't get new columns via create_all. Let's do a workaround.
+        # Create schema first, then create all tables, then add columns
         try:
             db.session.execute(db.text("CREATE SCHEMA IF NOT EXISTS booking;"))
+            db.session.commit()
+            print("[STARTUP] Schema 'booking' ensured.", flush=True)
+            
+            db.create_all()
+            print("[STARTUP] Booking tables ensured.", flush=True)
+            
+            # Additional column ensuring (for migrations outside create_all)
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS booking_amount NUMERIC(10, 2);"))
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2);"))
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS listing_title VARCHAR(255);"))
@@ -37,7 +42,7 @@ def create_app():
             db.session.execute(db.text("ALTER TABLE booking.booking ADD COLUMN IF NOT EXISTS guests INTEGER;"))
             db.session.commit()
         except BaseException as e:
-            # Table might not exist yet, or not postgres
+            print(f"[STARTUP ERROR] DB sync failed: {e}", flush=True)
             db.session.rollback()
 
     return app

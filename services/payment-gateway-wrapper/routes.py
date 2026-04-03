@@ -75,11 +75,12 @@ def capture():
     booking_id = data.get('bookingId')
     amount = data.get('amount')
     payment_method_id = data.get('paymentMethodId')
-    payment_intent_id = data.get('paymentIntentId') # New: confirm an existing intent
+    # Support both 'paymentIntentId' and 'paymentTxnId' for compatibility
+    payment_intent_id = data.get('paymentIntentId') or data.get('paymentTxnId')
     idempotency_key = data.get('idempotencyKey')
 
     if not any([payment_method_id, payment_intent_id]):
-         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentIntentId"}), 400
+         return jsonify({"code": 400, "data": {}, "message": "Missing paymentMethodId or paymentTxnId"}), 400
 
     if DEMO_MODE:
         print(f"[DEMO] Stripe call simulated: capture booking={booking_id} amount={amount}", flush=True)
@@ -93,6 +94,12 @@ def capture():
             # If we already have a payment intent confirmed on client, we just retrieve/verify it
             intent = stripe.PaymentIntent.retrieve(payment_intent_id)
             if intent.status == 'succeeded':
+                return jsonify({"code": 200, "data": {
+                    "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
+                }, "message": "success"}), 200
+            elif intent.status == 'requires_capture':
+                # Actually trigger the capture
+                intent = stripe.PaymentIntent.capture(payment_intent_id)
                 return jsonify({"code": 200, "data": {
                     "paymentTxnId": intent.id, "amount": amount, "status": "SUCCESS"
                 }, "message": "success"}), 200

@@ -28,6 +28,10 @@ def create_app():
     db.init_app(app)
     app.register_blueprint(main)
 
+    with app.app_context():
+        import models
+        db.create_all()
+
     return app
 
 
