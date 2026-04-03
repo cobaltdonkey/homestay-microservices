@@ -17,6 +17,7 @@ def health():
     return jsonify({"status": "ok", "service": "reject-booking-service"}), 200
 
 @bp.route('/reject/<bookingId>', methods=['POST', 'OPTIONS'])
+@bp.route('/<bookingId>', methods=['POST', 'OPTIONS'])
 def reject_booking(bookingId):
     # Handle CORS preflight explicitly if needed by frontend
     if request.method == 'OPTIONS':
@@ -85,7 +86,7 @@ def reject_booking(bookingId):
 
     # 2. Call PUT /bookings/{id} on Booking Detail Service to update status
     print(f"[DEBUG] Step 2: Updating booking {bookingId} status to {status_indication}...", flush=True)
-    call_service("put", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{bookingId}", {
+    put_status, put_data = call_service("put", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{bookingId}", {
         "status": status_indication
     })
     if put_status != 200:
