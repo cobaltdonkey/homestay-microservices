@@ -66,7 +66,7 @@ function ConfirmAndPayPageInner() {
     if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
       try {
-        const res = await fetch('/bookings/request-hold', {
+        const res = await fetch('/availability/holds', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -101,7 +101,7 @@ function ConfirmAndPayPageInner() {
           const releaseHold = async () => {
             if (holdId) {
               try {
-                await fetch(`/bookings/request-hold/${holdId}`, { method: 'DELETE' });
+                await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
                 console.log('[HOLD] Session expired, hold released:', holdId);
               } catch (e) {
                 console.error('[HOLD] Failed to release hold:', e);

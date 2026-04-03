@@ -143,7 +143,11 @@ export function ListingDetailPage() {
       };
 
       console.log(`[REDIRECTION] Navigating to request with state:`, state);
-      navigate(`/booking/authorise-and-request/${id}`, { state });
+      if (pendingBookingAction === 'instant') {
+        navigate(`/booking/confirm-and-pay/${id}`, { state });
+      } else {
+        navigate(`/booking/authorise-and-request/${id}`, { state });
+      }
       
       setPendingBookingAction(null);
       setPendingHold(null);
@@ -213,7 +217,7 @@ export function ListingDetailPage() {
       const checkOutStr = formatDateToYYYYMMDD(checkOut);
       
       // Communicate with Availability microservice to create a 120s soft hold
-      const res = await fetch('/availability/hold', {
+      const res = await fetch('/availability/holds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -221,6 +225,7 @@ export function ListingDetailPage() {
           guestId: user?.userId || 'anonymous',
           checkInDate: checkInStr,
           checkOutDate: checkOutStr,
+          reason: 'SOFT_HOLD',
           ttlSeconds: 120,
         }),
       });
@@ -264,26 +269,31 @@ export function ListingDetailPage() {
     const holdData = await checkAvailabilityBeforeBooking();
     if (!holdData) return;
 
+    const action = listing.bookingType === 'instant' ? 'instant' : 'request';
+    const state = { 
+      checkIn, 
+      checkOut, 
+      guests,
+      holdId: holdData.holdId,
+      expireAt: holdData.expiresAt || holdData.expireAt,
+      listingTitle: listing.propertyType,
+      imageUrl: listing.imageUrl,
+      price: listing.price,
+      rating: listing.rating,
+      reviewCount: listing.reviewCount,
+      nights,
+      hostId: listing.host.id
+    };
+
     if (isLoggedIn) {
-      navigate(`/booking/authorise-and-request/${id}`, {
-        state: { 
-          checkIn, 
-          checkOut, 
-          guests,
-          holdId: holdData.holdId,
-          expireAt: holdData.expiresAt || holdData.expireAt,
-          listingTitle: listing.propertyType,
-          imageUrl: listing.imageUrl,
-          price: listing.price,
-          rating: listing.rating,
-          reviewCount: listing.reviewCount,
-          nights,
-          hostId: listing.host.id
-        },
-      });
+      if (action === 'instant') {
+        navigate(`/booking/confirm-and-pay/${id}`, { state });
+      } else {
+        navigate(`/booking/authorise-and-request/${id}`, { state });
+      }
     } else {
       setPendingHold(holdData);
-      setPendingBookingAction('request');
+      setPendingBookingAction(action);
       handleOpenAuth('login');
     }
   };
@@ -542,7 +552,7 @@ export function ListingDetailPage() {
                 onClick={handleBookClick}
                 className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Request to Book
+                {listing.bookingType === 'instant' ? 'Reserve' : 'Request to Book'}
               </button>
             </div>
           </div>

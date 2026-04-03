@@ -51,6 +51,8 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
       
       if (result.role === 'host') {
         navigate('/host/dashboard');
+      } else {
+        navigate('/');
       }
     }
   };

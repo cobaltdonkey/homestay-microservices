@@ -71,7 +71,7 @@ function AuthoriseAndRequestPageInner() {
     if (!id || !checkIn || !checkOut || holdId) return;
     const createHold = async () => {
       try {
-        const res = await fetch('/availability/hold', {
+        const res = await fetch('/availability/holds', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -107,7 +107,7 @@ function AuthoriseAndRequestPageInner() {
           const releaseHold = async () => {
             if (holdId) {
               try {
-                await fetch(`/availability/hold/${holdId}`, { method: 'DELETE' });
+                await fetch(`/availability/holds/${holdId}`, { method: 'DELETE' });
                 console.log('[HOLD] Session expired, hold released:', holdId);
               } catch (e) {
                 console.error('[HOLD] Failed to release hold:', e);
