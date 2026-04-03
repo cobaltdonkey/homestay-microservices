@@ -136,19 +136,19 @@ def approve_booking(bookingId):
     })
     print(f"[DEBUG] Step 9 Response: {b_up_status} {b_up_data}", flush=True)
 
-    # Step 10: Upgrade the hold to CONFIRMED_HOLD with expiresAt=null.
-    # This permanently blocks the dates in availability checks without creating a separate
-    # Reservation entity — availability-service manages only the Hold entity.
-    print(f"[DEBUG] Step 10: Upgrading hold {holdId} to CONFIRMED_HOLD (permanent block)...", flush=True)
+    # Step 10: Upgrade the hold to CONFIRMED with expiresAt=null and ttlSeconds=null.
+    # This permanently blocks the dates in availability checks.
+    print(f"[DEBUG] Step 10: Upgrading hold {holdId} to CONFIRMED (permanent block)...", flush=True)
     h_up_status, h_up_data = call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}", {
-        "status": "CONFIRMED_HOLD",
-        "expiresAt": None
+        "status": "CONFIRMED",
+        "reason": "CONFIRMED_HOLD",
+        "expiresAt": None,
+        "ttlSeconds": None
     })
     print(f"[DEBUG] Step 10 Response: {h_up_status} {h_up_data}", flush=True)
     if h_up_status not in (200, 201):
         # Non-fatal: log the failure but do not abort — booking is already captured and confirmed.
-        # The hold will eventually be cleaned up, but the booking status is already CONFIRMED.
-        print(f"[WARN] Step 10 Failed to upgrade hold to CONFIRMED_HOLD: {h_up_status} {h_up_data}. Continuing...", flush=True)
+        print(f"[WARN] Step 10 Failed to upgrade hold to CONFIRMED: {h_up_status} {h_up_data}. Continuing...", flush=True)
 
     # Step 11: Call POST to Stay Service to initialise the stay lifecycle
     print(f"[DEBUG] Step 11: Initialising stay for booking {bookingId}...", flush=True)
@@ -175,7 +175,6 @@ def approve_booking(bookingId):
     print(f"[DEBUG] Step 12: Guest info: {g_cont_status}, Host info: {h_cont_status}", flush=True)
 
     # Step 13: Publish BookingConfirmed event to RabbitMQ
-    # Notification Gateway consumes this to send SMS (Step 14)
     print(f"[DEBUG] Step 13: Publishing booking.confirmed event...", flush=True)
     publish_event(EVENT_BOOKING_CONFIRMED, {
          "bookingId": bookingId,

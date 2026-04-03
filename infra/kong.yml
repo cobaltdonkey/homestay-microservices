@@ -111,12 +111,12 @@ services:
       - name: approve-booking-route-legacy
         paths:
           - /approve-booking
-        methods: ["POST", "OPTIONS"]
+        methods: ["POST", "GET", "OPTIONS"]
         strip_path: true
       - name: approve-booking-route
         paths:
           - /approve
-        methods: ["POST", "OPTIONS"]
+        methods: ["POST", "GET", "OPTIONS"]
         strip_path: false
 
   - name: reject-booking-service

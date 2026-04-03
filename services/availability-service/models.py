@@ -12,7 +12,7 @@ class Hold(db.Model):
     guest_id = db.Column(db.String(36), nullable=False)
     check_in_date = db.Column(db.Date, nullable=False)
     check_out_date = db.Column(db.Date, nullable=False)
-    ttl_seconds = db.Column(db.Integer, nullable=False, default=900)
+    ttl_seconds = db.Column(db.Integer, nullable=True, default=900)
     expires_at = db.Column(db.DateTime, nullable=True)
     reason = db.Column(db.Text)
     status = db.Column(db.Text, nullable=False, default='HELD')

@@ -10,6 +10,7 @@ from shared.constants import *
 main = Blueprint('main', __name__)
 
 @main.route('/health', methods=['GET'])
+@main.route('/stays/health', methods=['GET'])
 def health():
     return jsonify({
         "code": 200,
@@ -25,12 +26,18 @@ def health():
 def list_stays():
     host_id = request.args.get('hostId')
     guest_id = request.args.get('guestId')
+    status = request.args.get('status')
     
     query = Stay.query
     if host_id:
         query = query.filter_by(host_id=host_id)
     if guest_id:
         query = query.filter_by(guest_id=guest_id)
+        
+    if status == 'ACTIVE':
+        # Logic for "Active" stay: not yet checked out
+        today = datetime.utcnow().date()
+        query = query.filter(Stay.check_out_date >= today)
         
     stays = query.order_by(Stay.check_in_date.desc()).all()
     return jsonify({
@@ -140,29 +147,4 @@ def update_deposit_status(stay_id):
         "code": 200,
         "data": stay.to_dict(),
         "message": "Deposit status updated successfully"
-    }), 200
-@main.route('/stays', methods=['GET'])
-def list_stays():
-    host_id = request.args.get('hostId')
-    guest_id = request.args.get('guestId')
-    status = request.args.get('status')
-    
-    query = Stay.query
-    
-    if host_id:
-        query = query.filter_by(host_id=host_id)
-    if guest_id:
-        query = query.filter_by(guest_id=guest_id)
-        
-    if status == 'ACTIVE':
-        # Logic for "Active" stay: not yet checked out
-        today = datetime.utcnow().date()
-        query = query.filter(Stay.check_out_date >= today)
-        
-    stays = query.all()
-    
-    return jsonify({
-        "code": 200,
-        "data": [s.to_dict() for s in stays],
-        "message": "success"
     }), 200

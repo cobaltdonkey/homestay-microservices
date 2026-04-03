@@ -58,10 +58,10 @@ def check_availability(listing_id, check_in_date, check_out_date):
     if temporary_blocks:
         return False
 
-    # 2. Check for any overlapping PERMANENT holds (CONFIRMED_HOLD with expires_at = NULL)
+    # 2. Check for any overlapping PERMANENT holds (CONFIRMED_HOLD or CONFIRMED with expires_at = NULL)
     permanent_blocks = Hold.query.filter(
         Hold.listing_id == listing_id,
-        Hold.status == 'CONFIRMED_HOLD',
+        Hold.status.in_(['CONFIRMED_HOLD', 'CONFIRMED']),
         Hold.expires_at == None,
         check_in_date < Hold.check_out_date,
         check_out_date > Hold.check_in_date
@@ -210,7 +210,8 @@ def update_hold(hold_id):
             else:
                 hold.expires_at = datetime.fromisoformat(val.replace('Z', '+00:00'))
         if 'ttlSeconds' in data:
-            hold.ttl_seconds = int(data['ttlSeconds'])
+            val = data['ttlSeconds']
+            hold.ttl_seconds = int(val) if val is not None else None
 
         db.session.add(hold)
         db.session.commit()
