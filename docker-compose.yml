@@ -309,8 +309,6 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: payment-gateway-wrapper
       PORT: 5010
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_DEMO_MODE: ${STRIPE_DEMO_MODE}
     depends_on:
       rabbitmq:
         condition: service_healthy

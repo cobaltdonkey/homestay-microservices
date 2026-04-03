@@ -4,7 +4,11 @@ from flask import Blueprint, request, jsonify
 
 main = Blueprint('main', __name__)
 
-DEMO_MODE = os.environ.get('STRIPE_DEMO_MODE', 'true').lower() == 'true'
+def is_true(val):
+    if not val: return False
+    return str(val).strip().lower() in ('true', '1', 't', 'y', 'yes')
+
+DEMO_MODE = is_true(os.environ.get('STRIPE_DEMO_MODE', 'true'))
 
 if not DEMO_MODE:
     import stripe
