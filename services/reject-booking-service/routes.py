@@ -16,7 +16,7 @@ bp = Blueprint('main', __name__)
 def health():
     return jsonify({"status": "ok", "service": "reject-booking-service"}), 200
 
-@bp.route('/reject/<bookingId>', methods=['POST'])
+@bp.route('/<bookingId>', methods=['POST'])
 def reject_booking(bookingId):
     body = request.get_json() or {}
     status_indication = body.get('status', 'REJECTED') # 'REJECTED' or 'EXPIRED'
@@ -39,13 +39,34 @@ def reject_booking(bookingId):
     paymentTxnId = booking.get("paymentTxnId")
     depositTxnId = booking.get("depositTxnId")
 
+    # Step 1.5: If holdId is missing, try to find it by bookingId
+    if not holdId:
+        print(f"[DEBUG] Step 1.5: Looking up hold for booking {bookingId}", flush=True)
+        h_list_status, h_list_data = call_service("get", f"{AVAILABILITY_SERVICE_URL}/holds?bookingId={bookingId}")
+        if h_list_status == 200 and h_list_data.get("data"):
+            # FIX: Key is 'holdId' in the Availability Service to_dict()
+            holdId = h_list_data["data"][0].get("holdId") 
+            print(f"[DEBUG] Found holdId: {holdId}", flush=True)
+
+    # Fallback to values from the DB if not in request body
+    # We must use correct field names from the booking-detail-service response
+    listingId = listingId or booking.get("listingId")
+    guestId = guestId or booking.get("guestId")
+    hostId = hostId or booking.get("hostId")
+    checkInDate = checkInDate or booking.get("checkInDate")
+    checkOutDate = checkOutDate or booking.get("checkOutDate")
+    
+    print(f"[DEBUG] Final IDs: holdId={holdId}, listingId={listingId}, guestId={guestId}, hostId={hostId}", flush=True)
+
     # 2. Call PUT /bookings/{id} on Booking Detail Service to update status
+    print(f"[DEBUG] Step 2: Updating booking {bookingId} status to {status_indication}...", flush=True)
     call_service("put", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{bookingId}", {
         "status": status_indication
     })
 
     # 3. Call DELETE /availability/hold/{holdId} on Availability Service
     if holdId:
+        print(f"[DEBUG] Step 3: Deleting hold {holdId}...", flush=True)
         call_service("delete", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}")
 
     # Reason for payment services based on status
@@ -53,6 +74,7 @@ def reject_booking(bookingId):
 
     # 4. Call POST to Payment Gateway to void the payment
     if paymentTxnId:
+        print(f"[DEBUG] Step 4: Voiding payment {paymentTxnId}...", flush=True)
         call_service("post", f"{PAYMENT_GATEWAY_URL}/gateway/void", {
             "paymentTxnId": paymentTxnId,
             "reason": reason,
@@ -61,6 +83,7 @@ def reject_booking(bookingId):
 
     # 5. Call POST to Payment Gateway to release the deposit hold
     if depositTxnId:
+        print(f"[DEBUG] Step 5: Releasing deposit {depositTxnId}...", flush=True)
         call_service("post", f"{PAYMENT_GATEWAY_URL}/gateway/deposits/release", {
             "depositTxnId": depositTxnId,
             "reason": reason,
@@ -68,6 +91,7 @@ def reject_booking(bookingId):
         })
 
     # 6. Call GET to User Service to retrieve guest and host contact details
+    print(f"[DEBUG] Step 6: Fetching contacts for guest {guestId} and host {hostId}...", flush=True)
     guestContact, hostContact = {}, {}
     if guestId:
         _, g_res = call_service("get", f"{USERS_SERVICE_URL}/users/{guestId}/contact")
@@ -77,6 +101,7 @@ def reject_booking(bookingId):
         if h_res: hostContact = h_res.get("data", {})
 
     # 7. Publish BookingDeclined or BookingExpired event to RabbitMQ
+    print(f"[DEBUG] Step 7: Publishing event...", flush=True)
     event_payload = {
         "bookingId": bookingId,
         "guestId": guestId,

@@ -14,8 +14,13 @@ interface PendingApproval {
   guestAvatar: string;
   listingTitle: string;
   dates: string;
+  checkIn: string;
+  checkOut: string;
   guests: number;
   total: number;
+  listingId: string;
+  guestId: string;
+  hostId: string;
   expiresIn: { hours: number; minutes: number; seconds: number };
   paymentDueAt?: string;
 }
@@ -68,8 +73,13 @@ export function HostDashboardPage() {
             guestAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80',
             listingTitle: b.listingTitle ?? b.listingId,
             dates: `${b.checkInDate} – ${b.checkOutDate}`,
-            guests: 2,
+            checkIn: b.checkInDate,
+            checkOut: b.checkOutDate,
+            guests: b.guests ?? 2,
             total: Number(b.totalAmount ?? 0),
+            listingId: b.listingId,
+            guestId: b.guestId,
+            hostId: b.hostId,
             expiresIn: b.paymentDueAt ? calculateTimeRemaining(b.paymentDueAt) : { hours: 24, minutes: 0, seconds: 0 },
             paymentDueAt: b.paymentDueAt // Store for recalculation
           }));
@@ -183,14 +193,22 @@ export function HostDashboardPage() {
     if (selectedApproval) {
       try {
         const endpoint = action === 'approve'
-          ? `/bookings/${selectedApproval.bookingId}/approve`
-          : `/bookings/${selectedApproval.bookingId}/reject`;
-        const body = action === 'reject' && reason ? { reason } : undefined;
+          ? `/approve-booking/${selectedApproval.bookingId}`
+          : `/reject-booking/${selectedApproval.bookingId}`;
 
         const res = await fetch(endpoint, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            listingId: selectedApproval.listingId,
+            guestId: selectedApproval.guestId,
+            hostId: selectedApproval.hostId,
+            checkInDate: selectedApproval.checkIn,
+            checkOutDate: selectedApproval.checkOut,
+            status: action === 'approve' ? 'CONFIRMED' : 'REJECTED'
+          })
         });
         const json = await res.json();
         if (json.code === 200 || res.ok) {
