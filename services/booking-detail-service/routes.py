@@ -37,10 +37,11 @@ def get_booked_dates(listing_id):
 
 @main.route('/bookings', methods=['GET'])
 def list_bookings():
-    guest_id = request.args.get('guestId')
-    host_id = request.args.get('hostId')
-    status = request.args.get('status')
-    
+    guest_id       = request.args.get('guestId')
+    host_id        = request.args.get('hostId')
+    status         = request.args.get('status')
+    check_in_after = request.args.get('checkInAfter')  # YYYY-MM-DD — for upcoming guests
+
     query = BookingDetail.query
     if guest_id:
         query = query.filter_by(guest_id=guest_id)
@@ -48,9 +49,15 @@ def list_bookings():
         query = query.filter_by(host_id=host_id)
     if status:
         query = query.filter_by(status=status)
-    
+    if check_in_after:
+        try:
+            after_date = datetime.strptime(check_in_after, '%Y-%m-%d').date()
+            query = query.filter(BookingDetail.check_in_date >= after_date)
+        except ValueError:
+            pass  # Ignore invalid date format — return unfiltered results
+
     bookings = query.order_by(BookingDetail.created_at.desc()).all()
-    
+
     return jsonify({
         "code": 200,
         "data": [{
@@ -64,6 +71,7 @@ def list_bookings():
             "bookingAmount": float(b.booking_amount) if b.booking_amount is not None else None,
             "totalAmount": float(b.total_amount if b.total_amount is not None else b.booking_amount) if (b.total_amount is not None or b.booking_amount is not None) else None,
             "depositAmount": float(b.deposit_amount) if b.deposit_amount is not None else None,
+            "guests": b.guests,
             "listingTitle": b.listing_title,
             "listingImage": b.listing_image,
             "paymentDueAt": b.payment_due_at.isoformat() + "Z" if b.payment_due_at else None,

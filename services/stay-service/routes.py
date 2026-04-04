@@ -35,9 +35,13 @@ def list_stays():
         query = query.filter_by(guest_id=guest_id)
         
     if status == 'ACTIVE':
-        # Logic for "Active" stay: not yet checked out
+        # Active stay: guest has checked in but not yet checked out
         today = datetime.utcnow().date()
-        query = query.filter(Stay.check_out_date >= today)
+        query = query.filter(Stay.check_in_date <= today, Stay.check_out_date >= today)
+    elif status == 'PAST':
+        # Past stay: check-out date has already passed
+        today = datetime.utcnow().date()
+        query = query.filter(Stay.check_out_date < today)
         
     stays = query.order_by(Stay.check_in_date.desc()).all()
     return jsonify({

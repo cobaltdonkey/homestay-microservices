@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export interface HostBooking {
   id: string;
@@ -21,108 +21,182 @@ export interface HostBooking {
 interface HostBookingsContextType {
   upcomingGuests: HostBooking[];
   rejectedBookings: HostBooking[];
+  loading: boolean;
+  error: string | null;
   approveBooking: (booking: any) => void;
   rejectBooking: (booking: any, reason?: string) => void;
+  refetch: () => void;
 }
 
 const HostBookingsContext = createContext<HostBookingsContextType | undefined>(undefined);
 
-export function HostBookingsProvider({ children }: { children: ReactNode }) {
-  const [upcomingGuests, setUpcomingGuests] = useState<HostBooking[]>([
-    {
-      id: 'upcoming-1',
-      bookingId: 'BKG-20240003',
-      guestName: 'Emily Chen',
-      guestAvatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&q=80',
-      listingTitle: 'Modern Loft in Bugis',
-      listingImage: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80',
-      dates: '28 Mar – 31 Mar 2026',
-      checkIn: '28 Mar 2026',
-      checkOut: '31 Mar 2026',
-      guests: 2,
-      total: 1050,
-      status: 'approved',
-      approvedDate: '15 Mar 2026',
-    },
-    {
-      id: 'upcoming-2',
-      bookingId: 'BKG-20240007',
-      guestName: 'David Lim',
-      guestAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80',
-      listingTitle: 'Luxury Villa in East Coast',
-      listingImage: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&q=80',
-      dates: '5 Apr – 8 Apr 2026',
-      checkIn: '5 Apr 2026',
-      checkOut: '8 Apr 2026',
-      guests: 4,
-      total: 2670,
-      status: 'approved',
-      approvedDate: '18 Mar 2026',
-    },
-  ]);
+const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80';
+const FALLBACK_IMAGE  = 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80';
 
-  const [rejectedBookings, setRejectedBookings] = useState<HostBooking[]>([
-    {
-      id: 'rejected-1',
-      bookingId: 'BKG-20240002',
-      guestName: 'Alex Kumar',
-      guestAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&q=80',
-      listingTitle: 'Cozy Apartment in Tiong Bahru',
-      listingImage: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80',
-      dates: '15 Mar – 18 Mar 2026',
-      checkIn: '15 Mar 2026',
-      checkOut: '18 Mar 2026',
-      guests: 3,
-      total: 840,
-      status: 'rejected',
-      rejectedDate: '10 Mar 2026',
-      rejectionReason: 'Property maintenance scheduled during requested dates',
-    },
-  ]);
+function mapBookingRow(b: any, statusLabel: 'approved' | 'rejected'): HostBooking {
+  return {
+    id: b.bookingId,
+    bookingId: b.bookingId,
+    guestName: b.guestName ?? 'Guest',
+    guestAvatar: FALLBACK_AVATAR,
+    listingTitle: b.listingTitle ?? b.listingId ?? 'Listing',
+    listingImage: b.listingImage ?? FALLBACK_IMAGE,
+    dates: `${b.checkInDate ?? ''} – ${b.checkOutDate ?? ''}`,
+    checkIn: b.checkInDate ?? '',
+    checkOut: b.checkOutDate ?? '',
+    guests: b.guests ?? 1,
+    total: Number(b.totalAmount ?? b.bookingAmount ?? 0),
+    status: statusLabel,
+    approvedDate: statusLabel === 'approved' ? (b.updatedAt ?? '') : undefined,
+    rejectedDate:  statusLabel === 'rejected'  ? (b.updatedAt ?? '') : undefined,
+    rejectionReason: b.rejectionReason ?? undefined,
+  };
+}
+
+export function HostBookingsProvider({ children }: { children: ReactNode }) {
+  const [upcomingGuests, setUpcomingGuests]   = useState<HostBooking[]>([]);
+  const [rejectedBookings, setRejectedBookings] = useState<HostBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+
+  const fetchBookings = async () => {
+    const storedUser  = localStorage.getItem('secondhome_user');
+    const currentUser = storedUser ? JSON.parse(storedUser) : null;
+    if (!currentUser?.userId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // ── Determine the "upcoming" cutoff date ──────────────────────────────
+      // Standard check-in time is 15:00 SGT (UTC+8).
+      // Before 15:00 SGT: today's check-ins are still "upcoming".
+      // At/after 15:00 SGT: today's check-ins have passed the check-in window,
+      //   so we advance the cutoff to tomorrow to exclude them.
+      const getUpcomingCutoffDate = (): string => {
+        const nowUtcMs  = Date.now();
+        const sgtOffset = 8 * 60 * 60 * 1000;          // UTC+8 in ms
+        const nowSgt    = new Date(nowUtcMs + sgtOffset); // synthetic SGT Date
+
+        const sgtHour   = nowSgt.getUTCHours();   // hour in SGT (0–23)
+
+        // At or after 15:00 SGT → guests should be arriving; move cutoff to tomorrow
+        const isAfterCheckinCutoff = sgtHour >= 15;
+
+        if (isAfterCheckinCutoff) {
+          // Advance by one day
+          const tomorrow = new Date(nowUtcMs + sgtOffset + 24 * 60 * 60 * 1000);
+          const y = tomorrow.getUTCFullYear();
+          const m = String(tomorrow.getUTCMonth() + 1).padStart(2, '0');
+          const d = String(tomorrow.getUTCDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+
+        // Use today's SGT date
+        const y = nowSgt.getUTCFullYear();
+        const m = String(nowSgt.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(nowSgt.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      };
+
+      const cutoffDate = getUpcomingCutoffDate();
+
+      // Fetch CONFIRMED bookings (Upcoming Guests) — check-in on or after cutoff
+      const confirmedRes = await fetch(
+        `/bookings?hostId=${currentUser.userId}&status=CONFIRMED&checkInAfter=${cutoffDate}`
+      );
+      if (!confirmedRes.ok) throw new Error('Failed to fetch confirmed bookings');
+
+      const confirmedJson = await confirmedRes.json();
+
+      // Fetch REJECTED bookings
+      const rejectedRes = await fetch(
+        `/bookings?hostId=${currentUser.userId}&status=REJECTED`
+      );
+      if (!rejectedRes.ok) throw new Error('Failed to fetch rejected bookings');
+      const rejectedJson = await rejectedRes.json();
+
+      if (confirmedJson.code === 200 && Array.isArray(confirmedJson.data)) {
+        setUpcomingGuests(confirmedJson.data.map((b: any) => mapBookingRow(b, 'approved')));
+      }
+
+      if (rejectedJson.code === 200 && Array.isArray(rejectedJson.data)) {
+        setRejectedBookings(rejectedJson.data.map((b: any) => mapBookingRow(b, 'rejected')));
+      }
+    } catch (err: any) {
+      console.error('HostBookingsContext fetch error:', err);
+      setError(err.message ?? 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
 
   const approveBooking = (booking: any) => {
-    const timestamp = Date.now();
     const approvedBooking: HostBooking = {
-      id: `upcoming-${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
+      id: booking.bookingId,
       bookingId: booking.bookingId,
       guestName: booking.guestName,
-      guestAvatar: booking.guestAvatar,
+      guestAvatar: booking.guestAvatar ?? FALLBACK_AVATAR,
       listingTitle: booking.listingTitle,
-      listingImage: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80',
+      listingImage: FALLBACK_IMAGE,
       dates: booking.dates,
-      checkIn: booking.dates.split(' – ')[0] + ' 2026',
-      checkOut: booking.dates.split(' – ')[1] + ' 2026',
+      checkIn: booking.checkIn ?? booking.dates?.split(' – ')[0] ?? '',
+      checkOut: booking.checkOut ?? booking.dates?.split(' – ')[1] ?? '',
       guests: booking.guests,
       total: booking.total,
       status: 'approved',
-      approvedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      approvedDate: new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
     };
     setUpcomingGuests(prev => [...prev, approvedBooking]);
   };
 
   const rejectBooking = (booking: any, reason?: string) => {
-    const timestamp = Date.now();
     const rejectedBooking: HostBooking = {
-      id: `rejected-${timestamp}-${Math.random().toString(36).substring(2, 9)}`,
+      id: booking.bookingId,
       bookingId: booking.bookingId,
       guestName: booking.guestName,
-      guestAvatar: booking.guestAvatar,
+      guestAvatar: booking.guestAvatar ?? FALLBACK_AVATAR,
       listingTitle: booking.listingTitle,
-      listingImage: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&q=80',
+      listingImage: FALLBACK_IMAGE,
       dates: booking.dates,
-      checkIn: booking.dates.split(' – ')[0] + ' 2026',
-      checkOut: booking.dates.split(' – ')[1] + ' 2026',
+      checkIn: booking.checkIn ?? booking.dates?.split(' – ')[0] ?? '',
+      checkOut: booking.checkOut ?? booking.dates?.split(' – ')[1] ?? '',
       guests: booking.guests,
       total: booking.total,
       status: 'rejected',
-      rejectedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      rejectionReason: reason || 'No reason provided',
+      rejectedDate: new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
+      rejectionReason: reason ?? 'No reason provided',
     };
     setRejectedBookings(prev => [...prev, rejectedBooking]);
   };
 
   return (
-    <HostBookingsContext.Provider value={{ upcomingGuests, rejectedBookings, approveBooking, rejectBooking }}>
+    <HostBookingsContext.Provider
+      value={{
+        upcomingGuests,
+        rejectedBookings,
+        loading,
+        error,
+        approveBooking,
+        rejectBooking,
+        refetch: fetchBookings,
+      }}
+    >
       {children}
     </HostBookingsContext.Provider>
   );
