@@ -113,7 +113,7 @@ def approve_booking(bookingId):
 
     print(f"[DEBUG] Payment capture successful for booking {bookingId}.", flush=True)
 
-    # Step 8: Publish events to RabbitMQ
+    # Step 8 — Publish events to RabbitMQ
     publish_event("payment.captured", {
         "bookingId": bookingId,
         "paymentTxnId": paymentTxnId,
@@ -122,11 +122,11 @@ def approve_booking(bookingId):
     })
     
     if depositTxnId:
-        publish_event("deposit.held", {
+        publish_event("deposit.captured", {
             "bookingId": bookingId,
             "depositTxnId": depositTxnId,
             "amount": depositAmount,
-            "status": "HELD"
+            "status": "SUCCESS"
         })
 
     # Step 9: Call PUT /bookings/{id} on Booking Detail Service to update status to CONFIRMED

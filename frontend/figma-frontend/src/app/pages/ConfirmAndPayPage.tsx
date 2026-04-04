@@ -24,7 +24,7 @@ function ConfirmAndPayPageInner() {
   // Card is valid if stripe is loaded
   const isCardValid = !!stripe;
 
-  const storedUser = localStorage.getItem('secondhome_user');
+  const storedUser = localStorage.getItem('staylah_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482'; // fallback to seed guest
 

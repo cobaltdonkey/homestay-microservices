@@ -59,7 +59,7 @@ export function Navbar({ onOpenAuth, onOpenAuthForHost }: NavbarProps) {
                 <path d="M10 2L3 8V18H8V13H12V18H17V8L10 2Z" fill="white"/>
               </svg>
             </div>
-            <span className="text-[#FF385C] font-bold text-xl">SecondHome</span>
+            <span className="text-[#FF385C] font-bold text-xl">StayLah</span>
           </button>
 
           {/* Right Menu */}

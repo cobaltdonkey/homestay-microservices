@@ -60,7 +60,7 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
   const [error, setError]     = useState<string | null>(null);
 
   const fetchBookings = async () => {
-    const storedUser  = localStorage.getItem('secondhome_user');
+    const storedUser  = localStorage.getItem('staylah_user');
     const currentUser = storedUser ? JSON.parse(storedUser) : null;
     if (!currentUser?.userId) {
       setLoading(false);
