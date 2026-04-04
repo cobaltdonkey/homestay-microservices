@@ -80,7 +80,7 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
         {showHostNotice && (
           <div className="bg-[#FFF5F7] px-6 py-4 rounded-t-xl">
             <p className="text-sm text-[#FF385C] font-medium">
-              You need an account to list your property on SecondHome
+              You need an account to list your property on StayLah
             </p>
           </div>
         )}
@@ -117,7 +117,7 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
             <>
               {/* Login Tab */}
               <h2 className="text-2xl font-semibold text-[#222222] mb-6">
-                Welcome back to SecondHome
+                Welcome back to StayLah
               </h2>
 
               {/* Email */}
@@ -190,7 +190,7 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
             <>
               {/* Signup Tab */}
               <h2 className="text-2xl font-semibold text-[#222222] mb-6">
-                Join SecondHome
+                Join StayLah
               </h2>
 
               {/* First Name + Last Name */}
@@ -316,7 +316,7 @@ export function AuthModal({ initialTab = 'login', onClose, onSuccess, onAuthSucc
                   className="w-5 h-5 text-[#FF385C] border-2 border-[#EBEBEB] rounded focus:ring-[#FF385C] focus:ring-2 cursor-pointer"
                 />
                 <label htmlFor="isHost" className="ml-3 text-sm font-medium text-[#222222] cursor-pointer">
-                  I want to list and host properties on SecondHome
+                  I want to list and host properties on StayLah
                 </label>
               </div>
 

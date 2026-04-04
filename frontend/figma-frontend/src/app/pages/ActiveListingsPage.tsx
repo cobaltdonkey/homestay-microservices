@@ -27,7 +27,7 @@ export function ActiveListingsPage() {
   useEffect(() => {
     const fetchHostListings = async () => {
       // 1. Get current logged-in host's ID
-      const storedUser = localStorage.getItem('secondhome_user');
+      const storedUser = localStorage.getItem('staylah_user');
       const currentUser = storedUser ? JSON.parse(storedUser) : null;
       const hostId = currentUser?.userId;
 
@@ -173,7 +173,7 @@ export function ActiveListingsPage() {
           ) : (
             <div className="text-center py-20 border-2 border-dashed border-[#EBEBEB] rounded-xl">
               <p className="text-[#717171] mb-2 font-medium">No listings found</p>
-              <p className="text-sm text-[#717171]">You haven't added any properties to SecondHome yet.</p>
+              <p className="text-sm text-[#717171]">You haven't added any properties to StayLah yet.</p>
             </div>
           )}
         </div>

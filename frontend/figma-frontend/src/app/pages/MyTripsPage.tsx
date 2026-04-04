@@ -50,7 +50,7 @@ export function MyTripsPage() {
   // Fetch real bookings from backend
   useEffect(() => {
     const fetchBookings = async () => {
-      const storedUser = localStorage.getItem('secondhome_user');
+      const storedUser = localStorage.getItem('staylah_user');
       const currentUser = storedUser ? JSON.parse(storedUser) : null;
       if (!currentUser?.userId) {
         setIsLoading(false);

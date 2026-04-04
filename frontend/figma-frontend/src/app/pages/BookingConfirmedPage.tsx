@@ -4,7 +4,7 @@ import { Navbar } from '../components/Navbar';
 import { StatusBadge } from '../components/StatusBadge';
 import { CheckCircle, Calendar, Users, Home, ArrowRight, Wallet, TrendingDown } from 'lucide-react';
 
-const WALLET_KEY = 'secondhome_demo_wallet';
+const WALLET_KEY = 'staylah_demo_wallet';
 const INITIAL_BALANCE = 5000;
 
 function getWalletBalance(): number {

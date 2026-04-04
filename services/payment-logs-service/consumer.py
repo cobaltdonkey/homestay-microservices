@@ -49,14 +49,14 @@ def start_consumer(app):
                         transaction_type = 'UNKNOWN'
                         reason = data.get('reason')
                         
-                        # Labels and defaults based on routing key to match Step 14 doc
-                        if routing_key == 'payment.authorised':
-                            transaction_type = 'BOOKING_PAYMENT_AUTHORIZE'
+                        # Labels and defaults based on routing key
+                        if routing_key == 'payment.preauthorised':
+                            transaction_type = 'BOOKING_PAYMENT_PREAUTHORIZE'
                             payment_txn_id = data.get('paymentTxnId')
                             amount = data.get('bookingAmount', 0)
-                            status = 'AUTHORIZED'
+                            status = 'PREAUTHORISED'
                         elif routing_key == 'payment.captured':
-                            transaction_type = 'BOOKING_PAYMENT_CAPTURE'
+                            transaction_type = 'BOOKING_PAYMENT_CAPTURED'
                             payment_txn_id = data.get('paymentTxnId')
                             amount = data.get('amount') or data.get('bookingAmount', 0)
                             status = 'SUCCESS'
@@ -64,21 +64,21 @@ def start_consumer(app):
                             transaction_type = 'DEPOSIT_PREAUTHORIZE'
                             deposit_txn_id = data.get('depositTxnId')
                             deposit_amount = data.get('depositAmount', 0)
-                            status = 'HELD'
-                        elif routing_key == 'deposit.held':
-                            transaction_type = 'DEPOSIT_PREAUTHORIZE' # Keep same type as preauth but update status to HELD/SECURED
+                            status = 'PREAUTHORISED'
+                        elif routing_key == 'deposit.captured':
+                            transaction_type = 'DEPOSIT_CAPTURED'
                             deposit_txn_id = data.get('depositTxnId')
                             deposit_amount = data.get('depositAmount') or data.get('amount', 0)
-                            status = 'HELD'
+                            status = 'SUCCESS'
                         elif routing_key == 'payment.voided':
-                            transaction_type = 'PAYMENT_VOID'
+                            transaction_type = 'BOOKING_PAYMENT_VOIDED'
                             payment_txn_id = data.get('paymentTxnId')
                             status = 'VOIDED'
-                        elif routing_key == 'deposit.released':
-                            transaction_type = 'DEPOSIT_RELEASE'
+                        elif routing_key == 'deposit.released' or routing_key == 'deposit.voided':
+                            transaction_type = 'DEPOSIT_VOIDED'
                             deposit_txn_id = data.get('depositTxnId') or data.get('deposit_txn_id')
                             deposit_amount = data.get('depositAmount') or data.get('deposit_amount', 0)
-                            status = 'RELEASED'
+                            status = 'VOIDED'
                         elif routing_key == 'deposit.resolved':
                             # Published by the deposit-resolution orchestrator
                             transaction_type = data.get('transaction_type', 'DEPOSIT_RELEASE')

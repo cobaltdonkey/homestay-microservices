@@ -118,7 +118,7 @@ def reject_booking(bookingId):
         else:
             print(f"[REJECT-SERVICE][SUCCESS] Payment voided in Gateway Service.", flush=True)
         
-        # 5. Publish payment.voided and deposit.released events for Payment Logs Service
+        # 5. Publish payment.voided and deposit.voided events for Payment Logs Service
         if paymentTxnId:
             publish_event("payment.voided", {
                 "bookingId": bookingId,
@@ -128,12 +128,12 @@ def reject_booking(bookingId):
                 "idempotencyKey": f"void-log-{bookingId}"
             })
         if depositTxnId:
-            publish_event("deposit.released", {
+            publish_event("deposit.voided", {
                 "bookingId": bookingId,
                 "depositTxnId": depositTxnId,
-                "status": "RELEASED",
+                "status": "VOIDED",
                 "reason": reason,
-                "idempotencyKey": f"release-log-{bookingId}"
+                "idempotencyKey": f"void-dep-log-{bookingId}"
             })
 
     # 6. Call GET to User Service to retrieve guest and host contact details

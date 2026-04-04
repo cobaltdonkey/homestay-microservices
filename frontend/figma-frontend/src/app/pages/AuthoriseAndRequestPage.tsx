@@ -12,7 +12,7 @@ function AuthoriseAndRequestPageInner() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
-  const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
+  // const [paymentOption, setPaymentOption] = useState<'full' | 'split'>('full');
   const stripe = useStripe();
   const elements = useElements();
   const routeState = location.state as any || {};
@@ -31,7 +31,7 @@ function AuthoriseAndRequestPageInner() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Booking context from router state
-  const storedUser = localStorage.getItem('secondhome_user');
+  const storedUser = localStorage.getItem('staylah_user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const guestId = currentUser?.userId ?? '8b0e51e5-a7c3-4870-8684-683c8d5af482';
 
@@ -52,7 +52,7 @@ function AuthoriseAndRequestPageInner() {
   const checkIn: string = formatDateToYYYYMMDD(routeState.checkIn ? new Date(routeState.checkIn) : null);
   const checkOut: string = formatDateToYYYYMMDD(routeState.checkOut ? new Date(routeState.checkOut) : null);
   const total = routeState.price * (routeState.nights || 1) + listing.cleaningFee + listing.deposit;
-  const splitAmount = total / 2;
+  // const splitAmount = total / 2;
 
   const formatDateShort = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -253,59 +253,9 @@ function AuthoriseAndRequestPageInner() {
         <div className="grid grid-cols-3 gap-16">
           {/* LEFT COLUMN */}
           <div className="col-span-2 space-y-8">
-            {/* Section 1: Choose when to pay */}
+            {/* Section 1: Payment — Stripe Element */}
             <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">
-                1. Choose when to pay
-              </h2>
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-[#222222] transition-colors"
-                  style={{ borderColor: paymentOption === 'full' ? '#222222' : '#EBEBEB' }}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="full"
-                    checked={paymentOption === 'full'}
-                    onChange={() => setPaymentOption('full')}
-                    className="mt-1 accent-[#FF385C]"
-                  />
-                  <div className="flex-1">
-                    <div className="font-semibold text-[#222222]">
-                      Pay SGD {total.toLocaleString()} now
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:border-[#222222] transition-colors"
-                  style={{ borderColor: paymentOption === 'split' ? '#222222' : '#EBEBEB' }}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="split"
-                    checked={paymentOption === 'split'}
-                    onChange={() => setPaymentOption('split')}
-                    className="mt-1 accent-[#FF385C]"
-                  />
-                  <div className="flex-1">
-                    <div className="font-semibold text-[#222222]">
-                      Pay part now, part later
-                    </div>
-                    <div className="text-sm text-[#717171] mt-1">
-                      SGD {splitAmount.toLocaleString()} now, SGD {splitAmount.toLocaleString()} later
-                    </div>
-                    <button className="text-sm text-[#FF385C] hover:text-[#E31C5F] font-semibold mt-2 underline">
-                      More info
-                    </button>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* Section 2: Payment — Stripe Element */}
-            <div>
-              <h2 className="text-xl font-semibold text-[#222222] mb-4">2. Pay with Card</h2>
+              <h2 className="text-xl font-semibold text-[#222222] mb-4">1. Pay with Card</h2>
               <div className="border border-[#EBEBEB] rounded-xl overflow-hidden bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-4 text-[#717171]">
                   <CreditCard className="w-5 h-5" />
@@ -335,10 +285,10 @@ function AuthoriseAndRequestPageInner() {
               </div>
             </div>
 
-            {/* Section 3: Review your reservation */}
+            {/* Section 2: Review your reservation */}
             <div>
               <h2 className="text-xl font-semibold text-[#222222] mb-4">
-                3. Review your reservation
+                2. Review your reservation
               </h2>
               <div className="space-y-3 border border-[#EBEBEB] rounded-lg p-4">
                 <div className="flex justify-between">

@@ -62,7 +62,7 @@ export function HostDashboardPage() {
   };
 
   const fetchDashboardStats = async () => {
-    const storedUser = localStorage.getItem('secondhome_user');
+    const storedUser = localStorage.getItem('staylah_user');
     const currentUser = storedUser ? JSON.parse(storedUser) : null;
     if (!currentUser?.userId) {
       setStatsLoading(false);
@@ -141,7 +141,7 @@ export function HostDashboardPage() {
   // Fetch real pending approvals from backend
   useEffect(() => {
     const fetchPendingApprovals = async () => {
-      const storedUser = localStorage.getItem('secondhome_user');
+      const storedUser = localStorage.getItem('staylah_user');
       const currentUser = storedUser ? JSON.parse(storedUser) : null;
       if (!currentUser?.userId) return;
 

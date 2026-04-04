@@ -25,14 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Restore auth state from localStorage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('secondhome_user');
+    const storedUser = localStorage.getItem('staylah_user');
     if (storedUser) {
       try {
         const parsed = JSON.parse(storedUser);
         setUser(parsed);
         setIsLoggedIn(true);
       } catch {
-        localStorage.removeItem('secondhome_user');
+        localStorage.removeItem('staylah_user');
       }
     }
   }, []);
@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUser(userDataToSet);
         setIsLoggedIn(true);
-        localStorage.setItem('secondhome_user', JSON.stringify(userDataToSet));
+        localStorage.setItem('staylah_user', JSON.stringify(userDataToSet));
         return { success: true, role: userDataToSet.role };
       }
       return { success: false };
@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setIsLoggedIn(false);
-      localStorage.removeItem('secondhome_user');
+      localStorage.removeItem('staylah_user');
     }
   };
 
