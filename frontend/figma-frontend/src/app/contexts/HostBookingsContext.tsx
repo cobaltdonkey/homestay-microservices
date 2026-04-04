@@ -139,6 +139,13 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const approveBooking = (booking: any) => {
+    const checkInStr = booking.checkIn ?? booking.dates?.split(' – ')[0] ?? '';
+    // Only add to upcomingGuests if check-in date is today or in the future
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (checkInStr && checkInStr < todayStr) {
+      // Check-in is in the past — don't add to upcoming guests
+      return;
+    }
     const approvedBooking: HostBooking = {
       id: booking.bookingId,
       bookingId: booking.bookingId,
@@ -147,7 +154,7 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
       listingTitle: booking.listingTitle,
       listingImage: FALLBACK_IMAGE,
       dates: booking.dates,
-      checkIn: booking.checkIn ?? booking.dates?.split(' – ')[0] ?? '',
+      checkIn: checkInStr,
       checkOut: booking.checkOut ?? booking.dates?.split(' – ')[1] ?? '',
       guests: booking.guests,
       total: booking.total,
@@ -160,6 +167,7 @@ export function HostBookingsProvider({ children }: { children: ReactNode }) {
     };
     setUpcomingGuests(prev => [...prev, approvedBooking]);
   };
+
 
   const rejectBooking = (booking: any, reason?: string) => {
     const rejectedBooking: HostBooking = {

@@ -76,8 +76,18 @@ def start_consumer(app):
                             status = 'VOIDED'
                         elif routing_key == 'deposit.released':
                             transaction_type = 'DEPOSIT_RELEASE'
-                            deposit_txn_id = data.get('depositTxnId')
+                            deposit_txn_id = data.get('depositTxnId') or data.get('deposit_txn_id')
+                            deposit_amount = data.get('depositAmount') or data.get('deposit_amount', 0)
                             status = 'RELEASED'
+                        elif routing_key == 'deposit.resolved':
+                            # Published by the deposit-resolution orchestrator
+                            transaction_type = data.get('transaction_type', 'DEPOSIT_RELEASE')
+                            deposit_txn_id = data.get('deposit_txn_id') or data.get('depositTxnId')
+                            amount = data.get('amount', 0)
+                            deposit_amount = data.get('deposit_amount') or data.get('depositAmount', 0)
+                            status = data.get('status', 'RELEASED')
+                            reason = data.get('reason')
+                            booking_id = data.get('booking_id') or data.get('bookingId', 'unknown')
                         elif routing_key == 'payment.error':
                             transaction_type = 'PAYMENT_FAILED'
                             payment_txn_id = data.get('paymentTxnId', 'ERROR')
@@ -90,7 +100,7 @@ def start_consumer(app):
                             amount = data.get('amount', 0)
                             status = 'RECEIVED'
 
-                        idempotency_key = data.get('idempotencyKey') or f"{routing_key}-{booking_id}-{uuid.uuid4().hex[:8]}"
+                        idempotency_key = data.get('idempotency_key') or data.get('idempotencyKey') or f"{routing_key}-{booking_id}-{uuid.uuid4().hex[:8]}"
                         
                         record = PaymentLog(
                             log_id=str(uuid.uuid4()),

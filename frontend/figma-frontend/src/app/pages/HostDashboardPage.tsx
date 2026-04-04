@@ -91,24 +91,26 @@ export function HostDashboardPage() {
       const staysPastJson = staysPastRes.ok ? await staysPastRes.json() : null;
 
       // ── 4. Total Earnings ──────────────────────────────────────────────────
-      //    Step A: get all booking_ids for this host from booking table
+      //    Step A: get all confirmed booking_ids for this host
       const { data: hostBookings, error: bookingsErr } = await supabase
         .schema('booking')
         .from('booking')
         .select('booking_id')
-        .eq('host_id', currentUser.userId);
+        .eq('host_id', currentUser.userId)
+        .in('status', ['CONFIRMED']);
 
       let totalEarnings = 0;
       if (!bookingsErr && hostBookings && hostBookings.length > 0) {
         const bookingIds = hostBookings.map((b: any) => b.booking_id);
 
-        //    Step B: sum amount from payment_log for those booking_ids
+        //    Step B: sum ONLY booking payment captures — not deposit releases
+        //    BOOKING_PAYMENT_CAPTURE = host earned money; DEPOSIT_RELEASE = guest got deposit back (not income)
         const { data: paymentLogs, error: logsErr } = await supabase
           .schema('payment_logs_db')
           .from('payment_log')
-          .select('amount')
+          .select('amount, transaction_type')
           .in('booking_id', bookingIds)
-          .in('status', ['SUCCESS', 'RELEASED']);
+          .eq('transaction_type', 'BOOKING_PAYMENT_CAPTURE');
 
         if (!logsErr && paymentLogs) {
           totalEarnings = paymentLogs.reduce(

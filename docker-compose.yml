@@ -133,17 +133,19 @@ services:
       context: ./services/deposit-resolution
     env_file: .env
     environment:
-      DATABASE_URL: ${DEPOSIT_DB_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       SERVICE_NAME: deposit-resolution
       PORT: 5002
+      STAY_SERVICE_URL: http://stay-service:5006
+      PAYMENT_GATEWAY_URL: http://payment-gateway-wrapper:5010
+      USERS_SERVICE_URL: http://users-service:5003
+      PAYMENT_LOGS_SERVICE_URL: http://payment-logs-service:5008
+      INSPECTION_SERVICE_URL: https://personal-c9barqdh.outsystemscloud.com/InspectionService/rest/InspectionAPI
     depends_on:
       rabbitmq:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
-    volumes:
-      - ./services/shared:/app/shared
     networks:
       - airbnb-net
     expose:
