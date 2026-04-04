@@ -32,6 +32,9 @@ USERS_SERVICE_URL = os.environ.get(
 PAYMENT_LOGS_SERVICE_URL = os.environ.get(
     "PAYMENT_LOGS_SERVICE_URL", "http://payment-logs-service:5008"
 )
+BOOKING_DETAIL_SERVICE_URL = os.environ.get(
+    "BOOKING_DETAIL_SERVICE_URL", "http://booking-detail-service:5012"
+)
 
 RABBITMQ_URL = os.environ.get(
     "RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"

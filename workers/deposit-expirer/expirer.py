@@ -34,7 +34,7 @@ def wait_for_db():
 def run_cycle(engine):
     with engine.connect() as conn:
         result = conn.execute(text(
-            "SELECT stay_id FROM stay "
+            "SELECT stay_id FROM stay_db.stay "
             "WHERE deposit_status = 'HELD' "
             "AND checkout_time + INTERVAL '48 hours' < CURRENT_TIMESTAMP "
             "LIMIT 50"

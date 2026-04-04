@@ -141,6 +141,7 @@ services:
       USERS_SERVICE_URL: http://users-service:5003
       PAYMENT_LOGS_SERVICE_URL: http://payment-logs-service:5008
       INSPECTION_SERVICE_URL: https://personal-c9barqdh.outsystemscloud.com/InspectionService/rest/InspectionAPI
+      BOOKING_DETAIL_SERVICE_URL: http://booking-detail-service:5012
     depends_on:
       rabbitmq:
         condition: service_healthy

@@ -96,8 +96,7 @@ export function HostDashboardPage() {
         .schema('booking')
         .from('booking')
         .select('booking_id')
-        .eq('host_id', currentUser.userId)
-        .in('status', ['CONFIRMED']);
+        .eq('host_id', currentUser.userId);
 
       let totalEarnings = 0;
       if (!bookingsErr && hostBookings && hostBookings.length > 0) {

@@ -20,6 +20,7 @@ from helpers import (
     INSPECTION_SERVICE_URL,
     PAYMENT_GATEWAY_URL,
     USERS_SERVICE_URL,
+    BOOKING_DETAIL_SERVICE_URL,
 )
 
 bp = Blueprint('main', __name__)
@@ -120,6 +121,19 @@ def resolve_deposit():
     deposit_amount = float(stay["depositAmount"])
     checkout_time = stay.get("checkoutTime")
 
+    # ── Step 2b: Fetch paymentTxnId from Booking Detail Service ─
+    # The real Stripe PaymentIntent ID is stored on the booking record, not the stay.
+    # We need it to issue a partial refund for the deposit amount on release.
+    print(f"[STEP 2b] Fetching booking {booking_id} to retrieve paymentTxnId ...", flush=True)
+    bk_status, bk_data = call_service("get", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{booking_id}")
+    payment_txn_id = None
+    if bk_status == 200 and bk_data.get("data"):
+        payment_txn_id = bk_data["data"].get("paymentTxnId")
+    if payment_txn_id:
+        print(f"[STEP 2b] paymentTxnId={payment_txn_id}", flush=True)
+    else:
+        print(f"[STEP 2b] Could not retrieve paymentTxnId (status={bk_status}). Refund will be skipped.", flush=True)
+
     # ── Step 3: Record Inspection (OutSystems) ──────────────
     # Endpoint: POST /inspection (lowercase) with PascalCase fields
     # StayId must be int32 per OutSystems schema; derive from UUID deterministically
@@ -185,11 +199,16 @@ def resolve_deposit():
         gw_endpoint = f"{PAYMENT_GATEWAY_URL}/gateway/deposits/capture"
 
     print(f"[STEP 5] Calling {gw_endpoint} for depositTxnId={deposit_txn_id} ...", flush=True)
-    gw_status, gw_data = call_service("post", gw_endpoint, {
+    release_payload = {
         "depositTxnId": deposit_txn_id,
         "reason": reason,
         "idempotencyKey": idempotency_key,
-    }, retries=1)
+    }
+    if condition_result == CONDITION_GOOD:
+        # Pass the real Stripe PI and deposit amount so the gateway can issue a partial refund
+        release_payload["paymentTxnId"] = payment_txn_id
+        release_payload["amount"] = deposit_amount
+    gw_status, gw_data = call_service("post", gw_endpoint, release_payload, retries=1)
 
     if gw_status != 200:
         print(f"[STEP 5 ERROR] Payment gateway returned {gw_status}: {gw_data}", flush=True)
@@ -304,6 +323,17 @@ def auto_release_deposit(stayId):
     deposit_txn_id = stay["depositTxnId"]
     deposit_amount = float(stay["depositAmount"])
 
+    # ── Step 2b: Fetch paymentTxnId from Booking Detail Service ─
+    print(f"[AUTO-RELEASE][STEP 2b] Fetching booking {booking_id} for paymentTxnId ...", flush=True)
+    bk_status, bk_data = call_service("get", f"{BOOKING_DETAIL_SERVICE_URL}/bookings/{booking_id}")
+    payment_txn_id = None
+    if bk_status == 200 and bk_data.get("data"):
+        payment_txn_id = bk_data["data"].get("paymentTxnId")
+    if payment_txn_id:
+        print(f"[AUTO-RELEASE][STEP 2b] paymentTxnId={payment_txn_id}", flush=True)
+    else:
+        print(f"[AUTO-RELEASE][STEP 2b] paymentTxnId not found (status={bk_status}). Refund will be skipped.", flush=True)
+
     # Constants for no-response path
     condition_result = CONDITION_NO_RESPONSE
     reason = REASON_NO_RESPONSE
@@ -364,6 +394,8 @@ def auto_release_deposit(stayId):
         f"{PAYMENT_GATEWAY_URL}/gateway/deposits/release",
         {
             "depositTxnId": deposit_txn_id,
+            "paymentTxnId": payment_txn_id,
+            "amount": deposit_amount,
             "reason": reason,
             "idempotencyKey": idempotency_key,
         },

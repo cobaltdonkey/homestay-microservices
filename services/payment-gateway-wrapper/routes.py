@@ -225,13 +225,16 @@ def pre_auth():
                 results["paymentTxnId"] = booking_intent.id
                 results["paymentStatus"] = booking_intent.status
 
-        # 2. Deposit Amount — separate intent with off_session to allow server-side confirm
-        # 2. Deposit Amount — user requested generation of a deposit txn ID instead of splitting in Stripe
+        # 2. Deposit Amount — tracked internally via a generated ID.
+        # Stripe cannot reuse a one-time frontend-confirmed PaymentMethod for a second
+        # server-side PaymentIntent without a Customer object. The deposit hold is
+        # represented by a generated ID (pi_dep_...) and handled internally.
+        # release_deposit() and capture_deposit() both detect the pi_dep_ prefix and
+        # simulate the operation without calling Stripe.
         if deposit_amount:
-            # Generate a mock deposit transaction ID
-            mock_deposit_txn_id = f"pi_dep_{uuid.uuid4().hex[:16]}"
-            print(f"[PAYMENT] Bypassing Stripe for deposit; generated depositTxnId={mock_deposit_txn_id}", flush=True)
-            results["depositTxnId"] = mock_deposit_txn_id
+            dep_txn_id = f"pi_dep_{uuid.uuid4().hex[:16]}"
+            print(f"[PAYMENT] Deposit tracked internally: depositTxnId={dep_txn_id}", flush=True)
+            results["depositTxnId"] = dep_txn_id
             results["depositStatus"] = "HELD"
 
         print(f"[PAYMENT] pre-auth complete for booking={booking_id}: paymentTxnId={results.get('paymentTxnId')} depositTxnId={results.get('depositTxnId')}", flush=True)
@@ -250,6 +253,8 @@ def pre_auth():
 def release_deposit():
     data = request.json or {}
     deposit_txn_id = data.get('depositTxnId')
+    payment_txn_id = data.get('paymentTxnId')   # real Stripe PI — used for partial refund
+    amount = data.get('amount')                  # deposit amount in SGD (float)
     reason = data.get('reason', '')
     idempotency_key = data.get('idempotencyKey')
 
@@ -263,12 +268,51 @@ def release_deposit():
         }, "message": "success"}), 200
 
     try:
+        # pi_dep_ prefix = an internally-tracked deposit ID (never registered in Stripe).
+        # The deposit portion was captured as part of the full booking PaymentIntent.
+        # To release it, issue a partial Stripe Refund on the original booking PI.
+        if deposit_txn_id.startswith("pi_dep_"):
+            if payment_txn_id and amount:
+                refund_amount_cents = int(float(amount) * 100)
+                print(
+                    f"[GATEWAY] Issuing partial refund of {refund_amount_cents} cents "
+                    f"on PI {payment_txn_id} for deposit {deposit_txn_id}",
+                    flush=True,
+                )
+                refund = stripe.Refund.create(
+                    payment_intent=payment_txn_id,
+                    amount=refund_amount_cents,
+                    reason="requested_by_customer",
+                    metadata={
+                        "type": "deposit_release",
+                        "depositTxnId": deposit_txn_id,
+                    },
+                    idempotency_key=idempotency_key or f"refund-{deposit_txn_id}",
+                )
+                return jsonify({"code": 200, "data": {
+                    "depositTxnId": deposit_txn_id,
+                    "refundId": refund.id,
+                    "status": "RELEASED",
+                }, "message": "success"}), 200
+            else:
+                # No real PI available (old records without paymentTxnId) — simulate release.
+                print(
+                    f"[GATEWAY] Deposit {deposit_txn_id} is generated and no paymentTxnId provided "
+                    f"— simulating release without Stripe refund.",
+                    flush=True,
+                )
+                return jsonify({"code": 200, "data": {
+                    "depositTxnId": deposit_txn_id, "status": "RELEASED"
+                }, "message": "success"}), 200
+
+        # Real Stripe deposit PI — cancel/release the hold directly.
         stripe.PaymentIntent.cancel(deposit_txn_id, idempotency_key=idempotency_key)
         return jsonify({"code": 200, "data": {
             "depositTxnId": deposit_txn_id, "status": "RELEASED"
         }, "message": "success"}), 200
     except stripe.error.StripeError as e:
         return jsonify({"code": 402, "data": {}, "message": str(e)}), 402
+
 
 @main.route('/deposits/capture', methods=['POST'])
 @main.route('/gateway/deposits/capture', methods=['POST'])
@@ -288,6 +332,14 @@ def capture_deposit():
         }, "message": "success"}), 200
 
     try:
+        # pi_dep_ prefix = a locally-generated ID that was never registered in Stripe.
+        # Treat its capture as a simulated success.
+        if deposit_txn_id.startswith("pi_dep_"):
+            print(f"[GATEWAY] Deposit {deposit_txn_id} is a generated ID — simulating capture.", flush=True)
+            return jsonify({"code": 200, "data": {
+                "depositTxnId": deposit_txn_id, "status": "CAPTURED"
+            }, "message": "success"}), 200
+
         stripe.PaymentIntent.capture(deposit_txn_id, idempotency_key=idempotency_key)
         return jsonify({"code": 200, "data": {
             "depositTxnId": deposit_txn_id, "status": "CAPTURED"

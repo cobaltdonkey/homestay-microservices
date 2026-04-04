@@ -249,7 +249,7 @@ def initiate_booking():
             depositAmount = round(total * 0.1, 2)
             amount = total - depositAmount
 
-        paymentDueAt = (datetime.utcnow() + timedelta(minutes=2)).isoformat() + "Z"
+        paymentDueAt = (datetime.utcnow() + timedelta(hours=24)).isoformat() + "Z"
 
         status_init, res_init = call_service("post", "http://booking-detail-service:5012/bookings", {
             "bookingId": bookingId, "guestId": guestId, "hostId": hostId,
@@ -283,6 +283,16 @@ def initiate_booking():
         payment_txn_id = (pay_data.get("data") or {}).get("paymentTxnId")
         deposit_txn_id = (pay_data.get("data") or {}).get("depositTxnId")
 
+        # Step 6 — Guard: abort if the payment authorization itself failed
+        if pay_status != 200 or not payment_txn_id:
+            print(f"[ERROR] Pre-auth failed (status={pay_status}), voiding booking {bookingId}", flush=True)
+            call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {"status": "CANCELLED"})
+            return jsonify({
+                "code": pay_status or 402,
+                "data": None,
+                "message": f"Payment authorization failed: {(pay_data or {}).get('message', 'Unknown error')}"
+            }), pay_status or 402
+
         # Step 8 — Update Status (PAYMENT_AUTHORISED)
         call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
             "status": "PAYMENT_AUTHORISED",
@@ -296,7 +306,7 @@ def initiate_booking():
 
         # Step 10 — Extend Availability Hold (24h)
         call_service("put", f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
         # Step 11 — Final Status Update (PENDING_HOST)
         call_service("put", f"http://booking-detail-service:5012/bookings/{bookingId}", {
@@ -371,7 +381,7 @@ def initiate_booking():
         # Extend the existing hold (that is about to expire) for 24 hours
         call_service("put",
             f"{AVAILABILITY_SERVICE_URL}/holds/{holdId}/extend",
-            {"ttlSeconds": 120, "reason": "PENDING_HOST", "bookingId": bookingId})
+            {"ttlSeconds": 86400, "reason": "PENDING_HOST", "bookingId": bookingId})
 
     # Step 4 — Calculate amounts
     ci = date.fromisoformat(checkInDate)
