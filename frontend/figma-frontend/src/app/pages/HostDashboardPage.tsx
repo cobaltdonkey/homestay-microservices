@@ -94,7 +94,7 @@ export function HostDashboardPage() {
       //    Step A: get all confirmed booking_ids for this host
       const { data: hostBookings, error: bookingsErr } = await supabase
         .schema('booking')
-        .from('booking')
+        .from('booking_detail')
         .select('booking_id')
         .eq('host_id', currentUser.userId);
 
