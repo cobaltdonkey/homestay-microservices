@@ -1,39 +1,87 @@
 import { useState } from 'react';
-import { X, Upload, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { X, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 
-interface ActiveStay {
-  id: string;
+// ─── Props interface — matches what PastStaysPage passes ─────────────────────
+interface PastStayProps {
+  stayId: string;          // UUID from stay_db (stay_id)
+  hostId: string;          // UUID of the logged-in host
   bookingId: string;
   guestName: string;
-  guestAvatar: string;
   listingTitle: string;
-  checkIn: string;
-  checkOut: string;
-  guests: number;
-  depositStatus: 'held' | 'released' | 'captured';
+  checkOut: string;        // formatted display string
+  depositAmount: number;   // SGD float
 }
 
 interface InspectionReportModalProps {
-  stay: ActiveStay;
+  stay: PastStayProps;
   onClose: () => void;
+  onSuccess?: (result: { status: 'RELEASED' | 'CAPTURED'; reason: string; inspectionId: string }) => void;
 }
 
-type InspectionOutcome = 'no_damage' | 'damage_found' | 'auto_released' | null;
+type InspectionOutcome = 'no_damage' | 'damage_found' | null;
 
-export function InspectionReportModal({ stay, onClose }: InspectionReportModalProps) {
+// ─── Helper: map outcome to API condition_result ──────────────────────────────
+function toConditionResult(outcome: InspectionOutcome): 'GOOD' | 'BAD' {
+  return outcome === 'no_damage' ? 'GOOD' : 'BAD';
+}
+
+export function InspectionReportModal({ stay, onClose, onSuccess }: InspectionReportModalProps) {
   const [hasDamage, setHasDamage] = useState<boolean | null>(null);
   const [damageDescription, setDamageDescription] = useState('');
   const [outcome, setOutcome] = useState<InspectionOutcome>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [apiResult, setApiResult] = useState<{ status: string; reason: string; inspectionId: string } | null>(null);
 
-  const handleSubmit = () => {
-    if (hasDamage === false) {
-      setOutcome('no_damage');
-    } else if (hasDamage === true) {
-      setOutcome('damage_found');
+  const handleSubmit = async () => {
+    if (hasDamage === null) return;
+
+    const chosenOutcome: InspectionOutcome = hasDamage ? 'damage_found' : 'no_damage';
+    const conditionResult = toConditionResult(chosenOutcome);
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch('/deposit-resolutions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stay_id: stay.stayId,
+          host_id: stay.hostId,
+          condition_result: conditionResult,
+          notes: damageDescription || '',
+        }),
+      });
+
+      let body: any = {};
+      try { body = await res.json(); } catch { /* ignore parse error */ }
+
+      if (!res.ok || body.code >= 400) {
+        const msg = body.message || `Unexpected error (HTTP ${res.status})`;
+        setSubmitError(msg);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Success
+      const data = body.data ?? {};
+      const result = {
+        status: data.status as 'RELEASED' | 'CAPTURED',
+        reason: data.reason ?? '',
+        inspectionId: data.inspection_id ?? '',
+      };
+      setApiResult(result);
+      setOutcome(chosenOutcome);
+      if (onSuccess) onSuccess(result);
+    } catch (err: any) {
+      setSubmitError(err.message ?? 'Network error — please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // If outcome is shown, display the result screen
+  // ─── Outcome: No Damage ────────────────────────────────────────────────────
   if (outcome === 'no_damage') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -42,12 +90,17 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
           <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-[#F7F7F7] rounded-full transition-colors">
             <X className="w-5 h-5 text-[#222222]" />
           </button>
-          
+
           <div className="w-20 h-20 bg-[#ECFDF5] rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-12 h-12 text-[#10B981]" />
           </div>
-          <h2 className="text-2xl font-semibold text-[#222222] mb-3">No Damage Reported</h2>
-          <p className="text-[#717171] mb-6">Deposit of SGD 200 will be released to guest</p>
+          <h2 className="text-2xl font-semibold text-[#222222] mb-2">No Damage Reported</h2>
+          <p className="text-[#717171] mb-1">
+            Deposit of <span className="font-semibold text-[#222222]">SGD {stay.depositAmount.toFixed(2)}</span> will be refunded to the guest.
+          </p>
+          {apiResult?.inspectionId && (
+            <p className="text-xs text-[#AAAAAA] mb-6">Inspection ID: {apiResult.inspectionId}</p>
+          )}
           <button
             onClick={onClose}
             className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
@@ -59,6 +112,7 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
     );
   }
 
+  // ─── Outcome: Damage Found ─────────────────────────────────────────────────
   if (outcome === 'damage_found') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -67,39 +121,17 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
           <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-[#F7F7F7] rounded-full transition-colors">
             <X className="w-5 h-5 text-[#222222]" />
           </button>
-          
+
           <div className="w-20 h-20 bg-[#FEF2F2] rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-12 h-12 text-[#DC2626]" />
           </div>
-          <h2 className="text-2xl font-semibold text-[#222222] mb-3">Damage Reported</h2>
-          <p className="text-[#717171] mb-6">Deposit of SGD 200 will be captured</p>
-          <button
-            onClick={onClose}
-            className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (outcome === 'auto_released') {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-        <div className="relative bg-white rounded-2xl w-full max-w-[500px] shadow-2xl p-6 text-center">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-[#F7F7F7] rounded-full transition-colors">
-            <X className="w-5 h-5 text-[#222222]" />
-          </button>
-          
-          <div className="w-20 h-20 bg-[#FFF9E6] rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-12 h-12 text-[#F59E0B]" />
-          </div>
-          <h2 className="text-2xl font-semibold text-[#222222] mb-3">Deposit Auto-Released</h2>
-          <p className="text-[#717171] mb-6">
-            No report submitted within 48 hours — deposit has been automatically released
+          <h2 className="text-2xl font-semibold text-[#222222] mb-2">Damage Reported</h2>
+          <p className="text-[#717171] mb-1">
+            Deposit of <span className="font-semibold text-[#222222]">SGD {stay.depositAmount.toFixed(2)}</span> has been captured.
           </p>
+          {apiResult?.inspectionId && (
+            <p className="text-xs text-[#AAAAAA] mb-6">Inspection ID: {apiResult.inspectionId}</p>
+          )}
           <button
             onClick={onClose}
             className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors"
@@ -111,11 +143,14 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
     );
   }
 
-  // Main inspection form
+  // ─── Outcome: Auto‑released placeholder (not reachable from this modal) ─────
+  // (only shown in PastStaysPage for HELD stays past 48hrs — kept for display parity)
+
+  // ─── Main inspection form ──────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      
+
       <div className="relative bg-white rounded-2xl w-full max-w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
         <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-[#F7F7F7] rounded-full transition-colors z-10">
           <X className="w-5 h-5 text-[#222222]" />
@@ -126,13 +161,8 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
 
           {/* Stay Summary */}
           <div className="bg-[#F7F7F7] rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3 mb-3">
-              <img src={stay.guestAvatar} alt={stay.guestName} className="w-12 h-12 rounded-full object-cover" />
-              <div>
-                <div className="font-semibold text-[#222222]">{stay.guestName}</div>
-                <div className="text-sm text-[#717171]">{stay.bookingId}</div>
-              </div>
-            </div>
+            <div className="font-semibold text-[#222222] mb-1">{stay.guestName}</div>
+            <div className="text-sm text-[#717171] mb-3">{stay.bookingId}</div>
             <div className="border-t border-[#EBEBEB] pt-3 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-[#717171]">Listing</span>
@@ -141,6 +171,10 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
               <div className="flex justify-between">
                 <span className="text-[#717171]">Check-out</span>
                 <span className="font-semibold text-[#222222]">{stay.checkOut}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#717171]">Security deposit</span>
+                <span className="font-semibold text-[#222222]">SGD {stay.depositAmount.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -174,41 +208,47 @@ export function InspectionReportModal({ stay, onClose }: InspectionReportModalPr
             </div>
           </div>
 
-          {/* Damage Details (only show if damage selected) */}
+          {/* Damage Description (only if damage selected) */}
           {hasDamage === true && (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-[#222222] mb-2">
-                  Damage Description
-                </label>
-                <textarea
-                  value={damageDescription}
-                  onChange={(e) => setDamageDescription(e.target.value)}
-                  placeholder="Describe the damage found..."
-                  rows={4}
-                  className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C] resize-none"
-                />
-              </div>
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-[#222222] mb-2">
+                Damage Description <span className="font-normal text-[#717171]">(optional)</span>
+              </label>
+              <textarea
+                value={damageDescription}
+                onChange={(e) => setDamageDescription(e.target.value)}
+                placeholder="Describe the damage found..."
+                rows={4}
+                className="w-full px-4 py-3 border border-[#EBEBEB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF385C] resize-none"
+              />
+            </div>
+          )}
 
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-[#222222] mb-2">
-                  Upload Photos
-                </label>
-                <div className="border-2 border-dashed border-[#EBEBEB] rounded-lg p-8 text-center hover:border-[#FF385C] transition-colors cursor-pointer">
-                  <Upload className="w-8 h-8 text-[#717171] mx-auto mb-2" />
-                  <p className="text-sm text-[#717171]">Click to upload photos of the damage</p>
-                </div>
+          {/* Error Message */}
+          {submitError && (
+            <div className="mb-4 flex items-start gap-3 bg-[#FEF2F2] border border-[#DC2626] rounded-lg p-4">
+              <AlertCircle className="w-5 h-5 text-[#DC2626] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-[#DC2626]">Submission failed</p>
+                <p className="text-sm text-[#DC2626]">{submitError}</p>
               </div>
-            </>
+            </div>
           )}
 
           {/* Submit Button */}
           <button
             onClick={handleSubmit}
-            disabled={hasDamage === null}
-            className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors disabled:bg-[#EBEBEB] disabled:text-[#717171] disabled:cursor-not-allowed"
+            disabled={hasDamage === null || isSubmitting}
+            className="w-full bg-[#FF385C] hover:bg-[#E31C5F] text-white font-semibold py-3 rounded-lg transition-colors disabled:bg-[#EBEBEB] disabled:text-[#717171] disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Submit Report
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              'Submit Report'
+            )}
           </button>
         </div>
       </div>

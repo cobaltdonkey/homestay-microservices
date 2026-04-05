@@ -32,7 +32,7 @@ class Stay(db.Model):
             "depositTxnId": self.deposit_txn_id,
             "depositAmount": float(self.deposit_amount) if self.deposit_amount is not None else None,
             "depositStatus": self.deposit_status,
-            "checkoutTime": self.checkout_time.isoformat() if self.checkout_time else None,
-            "createdAt": self.created_at.isoformat() if self.created_at else None,
-            "updatedAt": self.updated_at.isoformat() if self.updated_at else None
+            "checkoutTime": self.checkout_time.isoformat() + "Z" if self.checkout_time else None,
+            "createdAt": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "updatedAt": self.updated_at.isoformat() + "Z" if self.updated_at else None
         }

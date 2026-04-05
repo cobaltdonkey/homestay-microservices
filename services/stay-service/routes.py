@@ -39,9 +39,14 @@ def list_stays():
         today = datetime.utcnow().date()
         query = query.filter(Stay.check_in_date <= today, Stay.check_out_date >= today)
     elif status == 'PAST':
-        # Past stay: check-out date has already passed
-        today = datetime.utcnow().date()
-        query = query.filter(Stay.check_out_date < today)
+        # Past stay: checkout time has already passed
+        from sqlalchemy import or_, and_
+        now = datetime.utcnow()
+        today = now.date()
+        query = query.filter(or_(
+            Stay.checkout_time <= now,
+            and_(Stay.checkout_time == None, Stay.check_out_date < today)
+        ))
         
     stays = query.order_by(Stay.check_in_date.desc()).all()
     return jsonify({

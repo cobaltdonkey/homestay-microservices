@@ -35,6 +35,7 @@ export default defineConfig({
       '/notifications': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/approve-booking': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/reject-booking': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/deposit-resolutions': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
 })
