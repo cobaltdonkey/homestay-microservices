@@ -3,6 +3,7 @@
 Airbnb-inspired homestay booking platform built on a microservices architecture.
 IS213 Enterprise Solution Development — SMU.
 
+**For Evaluators:** API keys and credentials are provided in a separate `credentials.txt` file submitted alongside this project. Copy the values from that file into the root `.env` and `frontend/figma-frontend/.env` before starting.
 ---
 
 ## Prerequisites
@@ -22,9 +23,43 @@ All backend configuration lives in the root `.env` file. The frontend reads its 
 The `.env` file is pre-filled with a shared Supabase project for demo use. To point to your own Supabase project, update the following fields:
 
 ```env
-SUPABASE_PROJECT_REF=<your-project-ref>
-SUPABASE_DB_HOST=<your-pooler-host>
-SUPABASE_DB_PASSWORD=<your-db-password>
+SUPABASE_PROJECT_REF=your_project_ref
+SUPABASE_DB_HOST=your_host
+SUPABASE_DB_PORT=6543
+SUPABASE_DB_PORT_DIRECT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=your_user
+SUPABASE_DB_PASSWORD=your_password
+SUPABASE_URL=your_supabase_url
+
+BOOKING_DB_URL=your_booking_db_url
+DEPOSIT_DB_URL=your_deposit_db_url
+USER_DB_URL=your_user_db_url
+LISTINGS_DB_URL=your_listings_db_url
+AVAILABILITY_DB_URL=your_availability_db_url
+STAY_DB_URL=your_stay_db_url
+INSPECTION_DB_URL=your_inspection_db_url
+PAYMENT_LOGS_DB_URL=your_payment_logs_db_url
+SEARCH_DB_URL=your_search_db_url
+NOTIFICATION_DB_URL=your_notification_db_url
+
+VITE_SUPABASE_URL=your_public_supabase_url
+VITE_SUPABASE_ANON_KEY=your_public_anon_key
+
+BOOKING_EXPIRER_DB_URL=your_booking_expirer_db_url
+DEPOSIT_EXPIRER_DB_URL=your_deposit_expirer_db_url
+
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+STRIPE_DEMO_MODE=false
+
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_FROM_NUMBER=your_twilio_from_number
+TWILIO_DEMO_MODE=false
+
 ```
 
 All `*_DB_URL` variables below are derived from these values. You do not need to edit them individually unless you have a custom setup.
@@ -37,6 +72,12 @@ Key toggles:
 | `TWILIO_DEMO_MODE` | `false` | Set to `true` to print SMS to Docker logs instead |
 
 ### 2. Frontend `.env`
+
+```env
+VITE_SUPABASE_URL=your_url
+VITE_SUPABASE_ANON_KEY=your_key
+VITE_STRIPE_PUBLISHABLE_KEY=your_key
+```
 
 ```bash
 cp frontend/figma-frontend/.env.example frontend/figma-frontend/.env
@@ -331,3 +372,4 @@ See `infra/kong.yml` for the full routing configuration.
 | RabbitMQ consumer not receiving | Check that `rabbitmq-setup` exited with code 0; if not: `docker compose restart rabbitmq-setup` |
 | Supabase connection refused | Confirm `SUPABASE_DB_PASSWORD` in `.env` is correct and the project is not paused |
 | Frontend shows no listings | Ensure the seed script has run and Kong is healthy; check browser console for proxy errors |
+| Twilio SMS not received | Trial accounts can only send to the verified number. Use `TWILIO_DEMO_MODE=true` and check `docker compose logs -f notification-gateway` instead |
