@@ -76,30 +76,26 @@ def handle_message(app, routing_key, data):
         listing_title = data.get('listingTitle', 'your homestay')
         send_sms(app,
             guest_phone,
-            f"Request sent! Booking ID: {booking_id} for '{listing_title}'. Stay: {check_in} to {check_out}. Awaiting host approval within 48 hours.",
+            f"Request sent! Booking ID: {booking_id} for '{listing_title}'. Stay: {check_in} to {check_out}. Awaiting host approval within 24 hours.",
             'booking.requested', booking_id, guest_id
         )
         send_sms(app,
             host_phone,
-            f"New booking request for '{listing_title}'! ID: {booking_id}. Guest: {guest_contact.get('name', 'Someone')} ({check_in} – {check_out}). Please approve or decline within 48 hours.",
+            f"New booking request for '{listing_title}'! ID: {booking_id}. Guest: {guest_contact.get('name', 'Someone')} ({check_in} – {check_out}). Please approve or decline within 24 hours.",
             'booking.requested', booking_id, host_id
         )
 
     elif routing_key == 'booking.declined':
-        alt_listings = data.get('alternativeListings', [])[:3]
-        alt_str = ', '.join([f"{l.get('title','?')} (${l.get('pricePerNight','?')}/night)" for l in alt_listings]) or 'None available'
         send_sms(app,
             guest_phone,
-            f"Booking {booking_id} was not approved. Alternatives: {alt_str}",
+            f"Booking {booking_id} was not approved.",
             'booking.declined', booking_id, guest_id
         )
 
     elif routing_key == 'booking.expired':
-        alt_listings = data.get('alternativeListings', [])[:3]
-        alt_str = ', '.join([f"{l.get('title','?')} (${l.get('pricePerNight','?')}/night)" for l in alt_listings]) or 'None available'
         send_sms(app,
             guest_phone,
-            f"Booking request {booking_id} expired - no host response. Try: {alt_str}",
+            f"Booking request {booking_id} expired - no host response.",
             'booking.expired', booking_id, guest_id
         )
 
