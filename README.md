@@ -117,6 +117,7 @@ The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/a
 | `/host/upcoming-guests` | Host — confirmed upcoming bookings |
 | `/host/rejected-bookings` | Host — rejected booking history |
 | `/host/past-stays` | Host — completed stays |
+| `/host/declined/:id` | Host — confirmation page for rejected booking |
 
 ---
 
@@ -137,13 +138,14 @@ The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/a
 1. Guest: same flow but choose the **Marina Bay** listing → confirmation shows `PENDING_HOST`
 2. Copy the Booking ID shown on the confirmation page
 3. Open `/host/dashboard`, paste the Booking ID, click **Load booking**
-4. Click **✓ Approve** → status changes to `CONFIRMED`
+4. Click **✓ Approve** → status changes to `CONFIRMED`. Behind the scenes, `approve-booking-service` orchestrates payment capture and stay creation.
 
 ### Scenario 2.2 — Host Reject
 
 1. Follow Scenario 1.2 up to step 3
 2. Click **✗ Reject** instead of Approve
-3. Docker logs show `[DEMO SMS]` with alternative listing suggestions
+3. User is redirected to `/host/declined/:id` and booking status becomes `REJECTED`.
+4. Docker logs show `[DEMO SMS]` with alternative listing suggestions.
 
 ### Scenario 3.1.1 — Post-Stay Inspection (Good)
 
@@ -151,20 +153,20 @@ The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/a
 2. Open `/host/dashboard` and use the **Submit inspection** section
 3. Enter the `stayId`, select **GOOD**, add notes
 4. Click **Submit Inspection** → result shows `action=RELEASE`
-5. Docker logs show `[DEMO SMS]` deposit released
+5. Docker logs show `[DEMO SMS]` deposit released (Reason: `HOST_REPORT`)
 
 ### Scenario 3.1.2 — Post-Stay Inspection (Bad)
 
 1. Same as above but select **BAD**
 2. Result shows `action=CAPTURE`
-3. Docker logs show `[DEMO SMS]` deposit charged
+3. Docker logs show `[DEMO SMS]` deposit charged (Reason: `DAMAGE`)
 
 ### Scenario 3.2 — Auto-Release (48h no report)
 
 1. For testing, change `time.sleep(300)` → `time.sleep(30)` in `workers/deposit-expirer/expirer.py`
 2. In Supabase, manually set a stay's `checkout_time` to 49 hours ago
 3. Wait one expirer cycle
-4. Docker logs show `[DEP-EXPIRER] Auto-release` triggered
+4. Docker logs show `[DEP-EXPIRER] Auto-release` triggered (Reason: `NO_RESPONSE_AUTO_RELEASE`)
 
 ---
 
@@ -172,12 +174,96 @@ The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/a
 
 The platform follows a **Microservices Architecture** backed by a **Shared Supabase PostgreSQL** database and **Event-Driven Notifications** via RabbitMQ.
 
+```mermaid
+graph TD
+    User((User/Guest))
+    Host((Host))
+    Frontend[Frontend React App]
+    Kong[Kong API Gateway :8000]
+
+    subgraph "Orchestration Layer"
+        BookingSvc[Booking Service :5001]
+        ApproveSvc[Approve Booking :5013]
+        RejectSvc[Reject Booking :5014]
+        DepRes[Deposit Resolution :5002]
+    end
+
+    subgraph "Domain & Data Services"
+        UserSvc[Users Service :5003]
+        ListingSvc[Listings Service :5004]
+        AvailSvc[Availability Service :5005]
+        StaySvc[Stay Service :5006]
+        InspSvc[Inspection Service :5007]
+        PayLogSvc[Payment Logs :5008]
+        BookDetailSvc[Booking Detail :5012]
+        SearchSvc[Listings Search :5009]
+    end
+
+    subgraph "Wrappers & External"
+        PayGW[Payment Gateway :5010]
+        NotifGW[Notification Gateway :5011]
+        Stripe((Stripe API))
+        Twilio((Twilio API))
+    end
+
+    subgraph "Event Bus & Workers"
+        RMQ[(RabbitMQ)]
+        BookExp[Booking Expirer]
+        DepExp[Deposit Expirer]
+    end
+
+    User --> Frontend
+    Host --> Frontend
+    Frontend --> Kong
+    Kong --> BookingSvc
+    Kong -- "/approve" --> ApproveSvc
+    Kong -- "/reject" --> RejectSvc
+    Kong -- "/deposit-resolutions" --> DepRes
+    Kong -- "/search" --> SearchSvc
+    Kong -- "/listings" --> ListingSvc
+    Kong -- "/users" --> UserSvc
+
+    BookingSvc --> BookDetailSvc
+    BookingSvc --> AvailSvc
+    BookingSvc --> PayGW
+    BookingSvc --> UserSvc
+
+    ApproveSvc --> AvailSvc
+    ApproveSvc --> PayGW
+    ApproveSvc --> StaySvc
+    ApproveSvc --> UserSvc
+
+    RejectSvc --> AvailSvc
+    RejectSvc --> PayGW
+    RejectSvc --> UserSvc
+    RejectSvc --> BookDetailSvc
+
+    DepRes --> StaySvc
+    DepRes --> InspSvc
+    DepRes --> PayGW
+    DepRes --> UserSvc
+    DepRes --> BookDetailSvc
+    DepRes --> PayLogSvc
+
+    BookingSvc -.-> RMQ
+    ApproveSvc -.-> RMQ
+    RejectSvc -.-> RMQ
+    DepRes -.-> RMQ
+    RMQ -.-> NotifGW
+    NotifGW --> Twilio
+    PayGW --> Stripe
+
+    BookExp --> BookingSvc
+    BookExp --> RejectSvc
+    DepExp --> DepRes
+```
+
 - **Kong Gateway** (port 8000): Routes all inbound API requests, handles CORS and internal DNS resolution.
-- **Atomic Services**: `users`, `listings`, `availability`, `stay`, `inspection`, `payment-logs`, `listings-search` — each owns a set of domain tables.
-- **Composite Services**: `booking-service` orchestrates multi-service booking flows; `deposit-resolution` resolves deposit capture/release.
+- **Orchestrators**: `booking-service` handles initial booking; `approve-booking-service` / `reject-booking-service` handle host actions; `deposit-resolution` manages post-stay finances.
+- **Domain Services**: `users`, `listings`, `availability`, `stay`, `inspection`, `payment-logs`, `listings-search`, `booking-detail` — each owns a set of domain tables.
 - **Wrapper Services**: `payment-gateway-wrapper` (Stripe), `notification-gateway` (Twilio/SMS).
-- **Workers**: `booking-expirer` expires stale pending requests; `deposit-expirer` auto-releases deposits after 48 h with no inspection report.
-- **Communication**: Synchronous REST for queries; asynchronous RabbitMQ topics for side effects (SMS notifications).
+- **Workers**: `booking-expirer` (cancels stale requests); `deposit-expirer` (auto-releases deposits).
+- **Communication**: Synchronous REST for queries; asynchronous RabbitMQ topics for side effects (SMS).
 
 See `infra/kong.yml` for the full routing configuration.
 
@@ -198,6 +284,9 @@ See `infra/kong.yml` for the full routing configuration.
 | listings-search-service | 5009 | Supabase `postgres` |
 | payment-gateway-wrapper | 5010 | — |
 | notification-gateway | 5011 | Supabase `postgres` |
+| booking-detail-service | 5012 | Supabase `postgres` |
+| approve-booking-service | 5013 | — |
+| reject-booking-service | 5014 | — |
 | Kong (proxy) | 8000 | — |
 | Kong (admin) | 8001 | — |
 | RabbitMQ (AMQP) | 5672 | — |
