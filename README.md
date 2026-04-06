@@ -65,6 +65,8 @@ Wait until all containers are healthy — approximately 2–3 minutes. Kong and 
 
 ### Seed demo data
 
+This step is only needed for a fresh Supabase project or if the demo data is missing from your database.
+
 ```bash
 # Option A: from your host machine
 python infra/seed_supabase.py
@@ -89,11 +91,36 @@ The Vite dev server proxies all API calls (`/users`, `/listings`, `/search`, `/a
 
 ## Demo Credentials
 
-| Field | Value |
-|---|---|
-| Email | `alice2@demo.com` |
-| Password | `password123` |
-| Role | Guest |
+### Guest Testing Account
+
+Register/login for a new account, or use the following credentials:
+
+- Email: `alice2@demo.com`
+- Password: `password123`
+
+### Host role account
+
+- Email: `kelsey.la31@gmail.com`
+- Password: `123`
+
+### User Testing Account
+
+To facilitate system testing and demonstration, a test user Gmail account has been created for evaluators:
+
+- Email: `testsmu560@gmail.com`
+- Password: `SMUESD123!`
+
+This account can be used to access the system and simulate user interactions across the booking and deposit resolution workflows for Stripe and Supabase.
+
+#### Stripe account
+
+- Email: `testsmu560@gmail.com`
+- Password: `SMUESD123!`
+
+#### Supabase account
+
+- Email: `testsmu560@gmail.com`
+- Password: `SMUESD123!x`
 
 ---
 
