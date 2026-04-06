@@ -40,13 +40,8 @@ def list_stays():
         query = query.filter(Stay.check_in_date <= today, Stay.check_out_date >= today)
     elif status == 'PAST':
         # Past stay: checkout time has already passed
-        from sqlalchemy import or_, and_
         now = datetime.utcnow()
-        today = now.date()
-        query = query.filter(or_(
-            Stay.checkout_time <= now,
-            and_(Stay.checkout_time == None, Stay.check_out_date < today)
-        ))
+        query = query.filter(Stay.checkout_time <= now)
         
     stays = query.order_by(Stay.check_in_date.desc()).all()
     return jsonify({
@@ -85,8 +80,8 @@ def create_stay():
         except ValueError:
             return jsonify({"code": 400, "data": {}, "message": "Invalid checkout time format"}), 400
     else:
-        # Default to checkOutDate at 11:00:00
-        checkout_time = datetime.combine(check_out_date, time(hour=11, minute=0, second=0))
+        # Default to checkOutDate at 11:00:00 UTC+8 (which is 03:00:00 UTC)
+        checkout_time = datetime.combine(check_out_date, time(hour=3, minute=0, second=0))
 
     stay_id = str(uuid.uuid4())
     new_stay = Stay(

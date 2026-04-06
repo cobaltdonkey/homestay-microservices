@@ -96,23 +96,16 @@ export function PastStaysPage() {
     setError(null);
 
     try {
-      // 1. Fetch all stays for this host
-      const staysRes = await fetch(`/stays?hostId=${user.userId}`);
+      // 1. Fetch only past stays for this host
+      const staysRes = await fetch(`/stays?hostId=${user.userId}&status=PAST`);
       if (!staysRes.ok) throw new Error('Failed to fetch stays');
       const staysJson = await staysRes.json();
       if (staysJson.code !== 200 || !Array.isArray(staysJson.data)) {
         throw new Error(staysJson.message || 'No stays data');
       }
 
-      // 2. Filter to past stays (checkout_time < now)
-      const nowMs = Date.now();
-      const today = new Date().toISOString().slice(0, 10);
-      const rawStays: any[] = staysJson.data.filter((s: any) => {
-        if (s.checkoutTime) {
-          return new Date(s.checkoutTime).getTime() <= nowMs;
-        }
-        return (s.checkOutDate ?? '') < today;
-      });
+      // 2. Data is already filtered by the backend
+      const rawStays: any[] = staysJson.data;
 
       // 3. Enrich each stay in parallel (listing title, guest name)
       const enriched: PastStay[] = await Promise.all(
