@@ -3,7 +3,7 @@
 Airbnb-inspired homestay booking platform built on a microservices architecture.
 IS213 Enterprise Solution Development — SMU.
 
-_** For Evaluators:** API keys and credentials are provided in a separate `credentials.txt` file submitted alongside this project. Copy the values from that file into the root `.env` and `frontend/figma-frontend/.env` before starting._
+For Evaluators: API keys and credentials are provided in a separate `credentials.txt` file submitted alongside this project. Copy the values from that file into the root `.env` and `frontend/figma-frontend/.env` before starting.
 ---
 
 ## Prerequisites
