@@ -96,62 +96,44 @@ export function PastStaysPage() {
     setError(null);
 
     try {
-      // 1. Fetch only past stays for this host
-      const staysRes = await fetch(`/stays?hostId=${user.userId}&status=PAST`);
+      // 1. Fetch past stays with enrichment
+      const staysRes = await fetch(`/stays?hostId=${user.userId}&status=PAST&enrich=true`);
       if (!staysRes.ok) throw new Error('Failed to fetch stays');
       const staysJson = await staysRes.json();
       if (staysJson.code !== 200 || !Array.isArray(staysJson.data)) {
         throw new Error(staysJson.message || 'No stays data');
       }
 
-      // 2. Data is already filtered by the backend
+      // 2. Data is already filtered and enriched by the backend
       const rawStays: any[] = staysJson.data;
 
-      // 3. Enrich each stay in parallel (listing title, guest name)
-      const enriched: PastStay[] = await Promise.all(
-        rawStays.map(async (s: any) => {
-          // Listing details
-          let listingTitle = s.listingId ?? 'Listing';
-          let listingImage = FALLBACK_IMAGE;
-          try {
-            const lr = await fetch(`/listings/${s.listingId}`);
-            if (lr.ok) {
-              const lj = await lr.json();
-              const ld = lj.data ?? lj;
-              listingTitle = ld.title ?? ld.name ?? listingTitle;
-              listingImage = ld.imageUrl ?? ld.image_url ?? ld.images?.[0] ?? FALLBACK_IMAGE;
-            }
-          } catch { /* use fallback */ }
+      // 3. Map to our internal type using backend enriched data
+      const enriched: PastStay[] = rawStays.map((s: any) => {
+        const ld = s.listingData || {};
+        const gd = s.guestData || {};
+        
+        const listingTitle = ld.title ?? ld.name ?? s.listingId ?? 'Listing';
+        const listingImage = ld.imageUrl ?? ld.image_url ?? ld.images?.[0] ?? FALLBACK_IMAGE;
+        const guestName = gd.name ?? gd.email ?? 'Guest';
 
-          // Guest name
-          let guestName = 'Guest';
-          try {
-            const gr = await fetch(`/users/${s.guestId}/profile`);
-            if (gr.ok) {
-              const gj = await gr.json();
-              guestName = gj.data?.name ?? gj.data?.email ?? guestName;
-            }
-          } catch { /* use fallback */ }
-
-          return {
-            id: s.stayId,
-            bookingId: s.bookingId,
-            guestId: s.guestId,
-            hostId: s.hostId ?? user.userId,
-            listingId: s.listingId,
-            guestName,
-            listingTitle,
-            listingImage,
-            checkIn: s.checkInDate ? formatDate(s.checkInDate) : '',
-            checkOut: s.checkOutDate ? formatDate(s.checkOutDate) : '',
-            checkoutTime: s.checkoutTime ?? null,
-            guests: 1,      // stay_db doesn't store guest count directly; default to 1
-            total: 0,       // similarly not on stay — shows 0 for now
-            depositAmount: typeof s.depositAmount === 'number' ? s.depositAmount : Number(s.depositAmount ?? 0),
-            depositStatus: s.depositStatus ?? 'HELD',
-          } satisfies PastStay;
-        })
-      );
+        return {
+          id: s.stayId,
+          bookingId: s.bookingId,
+          guestId: s.guestId,
+          hostId: s.hostId ?? user.userId,
+          listingId: s.listingId,
+          guestName,
+          listingTitle,
+          listingImage,
+          checkIn: s.checkInDate ? formatDate(s.checkInDate) : '',
+          checkOut: s.checkOutDate ? formatDate(s.checkOutDate) : '',
+          checkoutTime: s.checkoutTime ?? null,
+          guests: 1,      // stay_db doesn't store guest count directly; default to 1
+          total: 0,       // similarly not on stay — shows 0 for now
+          depositAmount: typeof s.depositAmount === 'number' ? s.depositAmount : Number(s.depositAmount ?? 0),
+          depositStatus: s.depositStatus ?? 'HELD',
+        } satisfies PastStay;
+      });
 
       // Sort most-recent checkout first
       enriched.sort((a, b) => {

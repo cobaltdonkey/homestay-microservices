@@ -1,6 +1,8 @@
 import os
 import uuid
+import requests
 from datetime import datetime, time
+from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, request, jsonify
 from sqlalchemy.exc import IntegrityError
 from models import Stay
@@ -27,6 +29,7 @@ def list_stays():
     host_id = request.args.get('hostId')
     guest_id = request.args.get('guestId')
     status = request.args.get('status')
+    enrich = request.args.get('enrich', 'false').lower() == 'true'
     
     query = Stay.query
     if host_id:
@@ -44,9 +47,49 @@ def list_stays():
         query = query.filter(Stay.checkout_time <= now)
         
     stays = query.order_by(Stay.check_in_date.desc()).all()
+    stays_data = [s.to_dict() for s in stays]
+
+    if enrich and stays_data:
+        # Identify unique IDs
+        listing_ids = list(set(s['listingId'] for s in stays_data if s.get('listingId')))
+        guest_ids = list(set(s['guestId'] for s in stays_data if s.get('guestId')))
+
+        # Fetch in parallel
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Listing lookups
+            listing_futures = {lid: executor.submit(requests.get, f"{LISTINGS_SERVICE_URL}/listings/{lid}", timeout=5) for lid in listing_ids}
+            # Guest lookups
+            guest_futures = {gid: executor.submit(requests.get, f"{USERS_SERVICE_URL}/users/{gid}/profile", timeout=5) for gid in guest_ids}
+
+            # Gather results
+            listings_map = {}
+            for lid, future in listing_futures.items():
+                try:
+                    resp = future.result()
+                    if resp.status_code == 200:
+                        listings_map[lid] = resp.json().get('data', {})
+                except Exception: pass
+
+            guests_map = {}
+            for gid, future in guest_futures.items():
+                try:
+                    resp = future.result()
+                    if resp.status_code == 200:
+                        guests_map[gid] = resp.json().get('data', {})
+                except Exception: pass
+
+        # Merge - return partial data if lookup fails (per user request)
+        for s in stays_data:
+            lid = s.get('listingId')
+            gid = s.get('guestId')
+            if lid in listings_map:
+                s['listingData'] = listings_map[lid]
+            if gid in guests_map:
+                s['guestData'] = guests_map[gid]
+
     return jsonify({
         "code": 200,
-        "data": [s.to_dict() for s in stays],
+        "data": stays_data,
         "message": "success"
     }), 200
 
