@@ -284,12 +284,12 @@ graph TD
     Host --> Frontend
     Frontend --> Kong
     Kong --> BookingSvc
-    Kong -- "/approve" --> ApproveSvc
-    Kong -- "/reject" --> RejectSvc
-    Kong -- "/deposit-resolutions" --> DepRes
-    Kong -- "/search" --> SearchSvc
-    Kong -- "/listings" --> ListingSvc
-    Kong -- "/users" --> UserSvc
+    Kong -->|/approve| ApproveSvc
+    Kong -->|/reject| RejectSvc
+    Kong -->|/deposit-resolutions| DepRes
+    Kong -->|/search| SearchSvc
+    Kong -->|/listings| ListingSvc
+    Kong -->|/users| UserSvc
 
     BookingSvc --> BookDetailSvc
     BookingSvc --> AvailSvc
